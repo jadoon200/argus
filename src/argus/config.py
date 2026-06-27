@@ -58,9 +58,8 @@ class Settings(BaseSettings):
 
     # --- Analyst agent (Layer 3) ------------------------------------------------------
     # auto -> local Ollama if reachable, else the deterministic template backend.
-    # auto NEVER selects the paid Claude backend (zero-cost by default); set
-    # llm_backend="anthropic" explicitly to use it. Values: "ollama" | "anthropic" |
-    # "template" | "auto".
+    # auto NEVER selects a remote/paid backend (zero-cost by default). Explicit values:
+    # "ollama" | "mlx" | "openai" | "anthropic" | "template" | "auto".
     llm_backend: str = "auto"
     anthropic_api_key: str | None = None  # also read from ANTHROPIC_API_KEY (see agent/llm.py)
     anthropic_model: str = "claude-opus-4-8"
@@ -68,6 +67,14 @@ class Settings(BaseSettings):
     # Preferred Ollama model; the backend auto-falls back to any installed model if
     # this one is absent (so the agent runs with whatever the user has pulled).
     ollama_model: str = "llama3.1"
+    # Apple-Silicon-native local inference via mlx-lm (free; the `mlx` extra). The path
+    # to serving a locally fine-tuned model. Opt-in: ARGUS_LLM_BACKEND=mlx.
+    mlx_model: str = "mlx-community/Qwen2.5-14B-Instruct-4bit"
+    # OpenAI-compatible server (vLLM / llama.cpp / LM Studio / groq / together). Free
+    # when pointed at a local server; opt-in: ARGUS_LLM_BACKEND=openai.
+    openai_base_url: str = "http://localhost:8000/v1"
+    openai_api_key: str | None = None  # a local server usually ignores this
+    openai_model: str = "local-model"
     # Agents deliberate (multiple LLM calls); give them room rather than racing them.
     llm_timeout_seconds: float = 180.0
     brief_context_docs: int = 12  # documents of evidence handed to the agents per query

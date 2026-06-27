@@ -10,6 +10,7 @@ roles by swapping the system prompt. Tests inject a fake backend implementing th
 Protocol, so the deliberation is exercised with no model and no network.
 """
 
+import json
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
@@ -74,12 +75,10 @@ class AnthropicBackend:
     def complete(
         self, system: str, user: str, response_schema: dict[str, Any] | None = None
     ) -> str:
-        import json as _json
-
         import anthropic  # optional dependency, imported lazily
 
         if response_schema is not None:
-            schema_json = _json.dumps(response_schema)
+            schema_json = json.dumps(response_schema)
             user = f"{user}\n\nRespond with ONLY valid JSON matching this schema:\n{schema_json}"
         client = anthropic.Anthropic(api_key=self._api_key, timeout=self._timeout)
         message = client.messages.create(
@@ -90,6 +89,75 @@ class AnthropicBackend:
         )
         parts = [block.text for block in message.content if getattr(block, "type", "") == "text"]
         return "\n".join(parts).strip()
+
+
+class OpenAIBackend:
+    """OpenAI-compatible chat backend (httpx, no SDK). Works against any server that
+    speaks /v1/chat/completions — vLLM, llama.cpp, LM Studio, groq, together. Free when
+    pointed at a local server."""
+
+    def __init__(self, base_url: str, api_key: str | None, model: str, timeout: float) -> None:
+        self.name = f"openai:{model}"
+        self._url = base_url.rstrip("/")
+        self._key = api_key
+        self._model = model
+        self._timeout = timeout
+
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        if response_schema is not None:
+            schema_json = json.dumps(response_schema)
+            user = f"{user}\n\nRespond with ONLY valid JSON matching this schema:\n{schema_json}"
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.2,
+        }
+        if response_schema is not None:
+            payload["response_format"] = {"type": "json_object"}
+        headers = {"Authorization": f"Bearer {self._key}"} if self._key else {}
+        resp = httpx.post(
+            f"{self._url}/chat/completions", json=payload, headers=headers, timeout=self._timeout
+        )
+        resp.raise_for_status()
+        return str(resp.json()["choices"][0]["message"]["content"]).strip()
+
+
+class MLXBackend:
+    """Apple-Silicon-native local inference via mlx-lm (free). Also the path to serving
+    a model fine-tuned locally with MLX LoRA. The model loads lazily and is cached."""
+
+    def __init__(self, model: str) -> None:
+        self.name = f"mlx:{model}"
+        self._model_name = model
+        self._loaded: tuple[Any, Any] | None = None
+
+    def _ensure_loaded(self) -> tuple[Any, Any]:
+        if self._loaded is None:
+            from mlx_lm import load
+
+            self._loaded = load(self._model_name)
+        return self._loaded
+
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        from mlx_lm import generate
+
+        if response_schema is not None:
+            schema_json = json.dumps(response_schema)
+            user = f"{user}\n\nRespond with ONLY valid JSON matching this schema:\n{schema_json}"
+        model, tokenizer = self._ensure_loaded()
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return str(generate(model, tokenizer, prompt=prompt, max_tokens=2048)).strip()
 
 
 def ollama_models(url: str, timeout: float = 3.0) -> list[str]:
@@ -130,6 +198,14 @@ def resolve_backend(settings: Settings | None = None) -> LLMBackend | None:
             log.warning("anthropic_selected_but_no_key_using_template")
             return None
         return AnthropicBackend(key, s.anthropic_model, s.llm_timeout_seconds)
+
+    if choice == "mlx":
+        return MLXBackend(s.mlx_model)
+
+    if choice == "openai":
+        return OpenAIBackend(
+            s.openai_base_url, s.openai_api_key, s.openai_model, s.llm_timeout_seconds
+        )
 
     if choice in ("ollama", "auto"):
         models = ollama_models(s.ollama_url)

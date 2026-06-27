@@ -1,7 +1,15 @@
+import json
+import sys
+import types
+
+import httpx
 import pytest
+import respx
 
 from argus.agent.llm import (
+    MLXBackend,
     OllamaBackend,
+    OpenAIBackend,
     _resolve_ollama_model,
     ollama_models,
     resolve_backend,
@@ -45,3 +53,37 @@ def test_resolve_ollama_model_prefers_then_falls_back() -> None:
 
 def test_ollama_models_unreachable_returns_empty() -> None:
     assert ollama_models("http://127.0.0.1:1", timeout=0.5) == []
+
+
+@respx.mock
+def test_openai_backend_completes_and_requests_json() -> None:
+    route = respx.post("http://localhost:8000/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+    )
+    backend = OpenAIBackend("http://localhost:8000/v1", None, "local-model", 30.0)
+    assert backend.complete("sys", "user") == "hi"
+    backend.complete("sys", "user", response_schema={"type": "object"})
+    body = json.loads(route.calls.last.request.content)
+    assert body["response_format"]["type"] == "json_object"  # structured-output path
+
+
+def test_mlx_backend_generates(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("mlx_lm")
+
+    class _Tok:
+        def apply_chat_template(
+            self, messages: list[dict[str, str]], tokenize: bool, add_generation_prompt: bool
+        ) -> str:
+            return "PROMPT: " + messages[-1]["content"]
+
+    fake.load = lambda name: ("MODEL", _Tok())  # type: ignore[attr-defined]
+    fake.generate = lambda model, tokenizer, prompt, max_tokens: "mlx response"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "mlx_lm", fake)
+
+    backend = MLXBackend("mlx-community/Qwen2.5-14B-Instruct-4bit")
+    assert backend.complete("sys", "a question") == "mlx response"
+
+
+def test_resolve_explicit_backends() -> None:
+    assert isinstance(resolve_backend(_settings(llm_backend="mlx")), MLXBackend)
+    assert isinstance(resolve_backend(_settings(llm_backend="openai")), OpenAIBackend)
