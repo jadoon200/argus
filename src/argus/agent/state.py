@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import TypedDict
 
+from argus.agent.schemas import Finding
 from argus.nlp.reliability import admiralty_code, credibility_label, reliability_label
 
 
@@ -66,5 +67,6 @@ class DeliberationState(TypedDict, total=False):
     critiques: list[str]  # accumulated red-team challenges
     transcript: list[tuple[str, str]]  # (role, text) record of the deliberation
     round: int
-    finding: str  # adjudicator raw output
+    finding: str  # adjudicator output rendered to text (for the brief body)
+    finding_struct: Finding | None  # validated structured finding, when JSON succeeded
     backend: str

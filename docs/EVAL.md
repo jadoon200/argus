@@ -78,8 +78,23 @@ is available (local Ollama, else the template digest).
 fixture corpus is small and lexically clean, so retrieval=1.00 mainly guards against
 regressions — the discriminating checks are citation coverage, fabrication, and the trap.
 
-**LLM-path numbers (a deliberated brief vs the digest): pending** a capable local model
-(`qwen2.5:14b`); they land here once measured.
+**LLM-path (multi-agent deliberation, structured outputs, `ollama:qwen2.5:14b`):**
+
+| Query (gold) | recall@3 | MRR | confidence | cite coverage | citations | fabrications caught |
+|---|---|---|---|---|---|---|
+| disputed-reef standoff (3 corroborating B sources) | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
+| power-outage sabotage (1 × D state-affiliated — TRAP) | 1.00 | 1.00 | **low** | 1.00 | 1 | 1 |
+| central-bank decision (single clear source) | 1.00 | 1.00 | low–moderate | 1.00 | 1 | 1 |
+
+- **Calibration trap held: 0 breaches** — the single low-reliability state-affiliated source
+  stayed *low* confidence (not a finding of sabotage), while the 3-source reef story earned
+  *moderate*. The ACH / estimative-language discipline is doing its job.
+- **Citation coverage 1.00** — structured JSON output makes every key judgment carry a
+  citation, and the resolvability invariant dropped every non-resolving label (fabrications
+  caught, never shown).
+- Caveats: the fixture corpus is small and lexically clean, so recall=1.00 is a regression
+  guard, not a hard retrieval test; and the model is mildly stochastic (the central-bank
+  confidence varied low↔moderate across runs).
 
 ## Recorded negatives (where it fails)
 
@@ -90,4 +105,10 @@ viral events. Each negative gets characterized (why it fails, when), not hidden.
 - **Template digest is not calibration-aware** — it is a relevance-ranked evidence digest, so
   it always reports *low* confidence and makes no analytic judgment. Honest by construction
   (it never overstates), but it is not a substitute for the deliberated brief.
-- _More land once the LLM-path eval runs on `qwen2.5:14b`._
+- **Models cite labels inconsistently** — qwen2.5:14b sometimes wrote `[1]` instead of `[E1]`,
+  which originally resolved to *zero* citations on the reef query. The eval caught it (3
+  fabrications, 0 citations); citation resolution was then made tolerant of label variants
+  (`1` / `E1` / `[E1]` / raw doc id all resolve). A concrete case of the eval driving a fix.
+- **Confidence is mildly stochastic** — the same single-source query drifted low↔moderate
+  across runs. Acceptable here (never breaching the trap), but a reason to keep `temperature`
+  low and, later, to report confidence over multiple samples.

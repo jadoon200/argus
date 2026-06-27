@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 from argus.agent.analyst import extractive_brief, generate_brief
 from argus.agent.graph import run_deliberation
 from argus.agent.state import EvidenceItem
@@ -15,23 +18,37 @@ class FakeBackend:
 
     name = "fake"
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
         # Match the unique ROLE: markers (the Adjudicator prompt also mentions
         # "Red Team" and "Analyst", so plain substring checks would collide).
         if "ROLE: Hypothesis-setter" in system:
+            if response_schema is not None:  # structured-output path
+                return json.dumps(
+                    {"hypotheses": ["The activity is escalation.", "The activity is routine."]}
+                )
             return "H1: The activity is escalation.\nH2: The activity is routine."
         if "ROLE: Lead Analyst" in system:
             return "I favour H1; the patrols [E1] indicate escalation."
         if "ROLE: Red Team" in system:
             return "Over-reliant on a single source [E1]; H2 is plausible [E2]."
         if "ROLE: Adjudicator" in system:
-            return (
-                "KEY JUDGMENTS:\n"
-                "- Escalation is likely given the deployment [E1].\n"
-                "CONFIDENCE: moderate - limited corroboration.\n"
-                "ALTERNATIVES: H2 routine activity; more independent sources would raise it.\n"
-                "INTELLIGENCE GAPS: intentions are unknown [E9]."  # [E9] is out of range
-            )
+            if response_schema is not None:
+                return json.dumps(
+                    {
+                        # [E9] is out of range and must be dropped on resolution.
+                        "key_judgments": [
+                            {"judgment": "Escalation is likely", "citations": ["E1", "E9"]}
+                        ],
+                        "confidence": "moderate",
+                        "confidence_rationale": "limited corroboration",
+                        "alternative_hypothesis": "H2 routine activity is plausible",
+                        "collection_requirement": "more independent sources",
+                        "intelligence_gaps": ["intentions are unknown"],
+                    }
+                )
+            return "KEY JUDGMENTS:\n- Escalation is likely [E1].\nCONFIDENCE: moderate."
         return ""
 
 
@@ -69,3 +86,31 @@ def test_template_fallback_is_labelled_digest() -> None:
     assert result.backend == "template"
     assert result.citations == ["reuters.com:1", "rt.com:9"]
     assert result.gaps and "deterministic fallback" in result.gaps
+
+
+class NoJsonBackend:
+    """Never returns valid JSON, even when a schema is requested — exercises the
+    graceful fallback from the structured path to free-form text parsing."""
+
+    name = "nojson"
+
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        if "ROLE: Hypothesis-setter" in system:
+            return "H1: One.\nH2: Two."
+        if "ROLE: Adjudicator" in system:
+            return (
+                "KEY JUDGMENTS:\n- Escalation is likely [E1].\n"
+                "CONFIDENCE: high - well corroborated.\n"
+                "ALTERNATIVES: routine activity.\nINTELLIGENCE GAPS: intentions unknown."
+            )
+        return "argument citing [E1]"
+
+
+def test_structured_output_falls_back_to_text() -> None:
+    result = generate_brief("q?", evidence=_EVIDENCE, backend=NoJsonBackend(), persist=False)
+    assert result.backend == "nojson"
+    assert result.confidence == "high"  # parsed from the free-form text path
+    assert result.hypotheses == ["One.", "Two."]
+    assert result.citations == ["reuters.com:1"]

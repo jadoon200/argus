@@ -10,7 +10,7 @@ roles by swapping the system prompt. Tests inject a fake backend implementing th
 Protocol, so the deliberation is exercised with no model and no network.
 """
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
@@ -24,7 +24,12 @@ log = get_logger(__name__)
 class LLMBackend(Protocol):
     name: str
 
-    def complete(self, system: str, user: str) -> str: ...
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        """Complete a prompt. When `response_schema` (a JSON schema) is given, ask the
+        model for JSON matching it — the structured-output path."""
+        ...
 
 
 class OllamaBackend:
@@ -37,20 +42,21 @@ class OllamaBackend:
         self._model = model
         self._timeout = timeout
 
-    def complete(self, system: str, user: str) -> str:
-        resp = httpx.post(
-            f"{self._url}/api/chat",
-            json={
-                "model": self._model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "stream": False,
-                "options": {"temperature": 0.2},
-            },
-            timeout=self._timeout,
-        )
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }
+        if response_schema is not None:
+            payload["format"] = response_schema  # Ollama structured outputs (JSON schema)
+        resp = httpx.post(f"{self._url}/api/chat", json=payload, timeout=self._timeout)
         resp.raise_for_status()
         content = resp.json().get("message", {}).get("content", "")
         return str(content).strip()
@@ -65,9 +71,16 @@ class AnthropicBackend:
         self._model = model
         self._timeout = timeout
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(
+        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+    ) -> str:
+        import json as _json
+
         import anthropic  # optional dependency, imported lazily
 
+        if response_schema is not None:
+            schema_json = _json.dumps(response_schema)
+            user = f"{user}\n\nRespond with ONLY valid JSON matching this schema:\n{schema_json}"
         client = anthropic.Anthropic(api_key=self._api_key, timeout=self._timeout)
         message = client.messages.create(
             model=self._model,

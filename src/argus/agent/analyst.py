@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from argus.agent.graph import run_deliberation
 from argus.agent.llm import LLMBackend, resolve_backend
+from argus.agent.schemas import Finding
 from argus.agent.state import BriefResult, DeliberationState, EvidenceItem, evidence_labels
 from argus.config import get_settings
 from argus.db.base import session_scope
@@ -29,6 +30,7 @@ log = get_logger(__name__)
 
 _AUTO: object = object()  # sentinel: resolve the backend from settings
 _CITATION_RE = re.compile(r"\[([^\]]+)\]")
+_LABEL_NUM_RE = re.compile(r"\d+")
 _SECTION_HEADERS = ("KEY JUDGMENTS", "CONFIDENCE", "ALTERNATIVES", "INTELLIGENCE GAPS")
 _CONFIDENCE_RE = re.compile(r"\b(low|moderate|high)\b", re.IGNORECASE)
 
@@ -101,18 +103,29 @@ def _strip_bullet(line: str) -> str:
     return line.lstrip("-*•· ").strip()
 
 
-def _resolve_citations(text: str, label_map: dict[str, str]) -> list[str]:
-    """Resolve [E#] labels (or a raw doc id) to doc ids, keeping only ones that exist.
+def _resolve_label(token: str, label_map: dict[str, str], valid_ids: set[str]) -> str | None:
+    """Map one citation token to a real doc id, tolerating label variants.
 
-    This is the citation-resolvability invariant: anything the model cites that doesn't
-    map to a real evidence item is silently dropped, so a brief can never carry a
-    fabricated citation.
+    Models cite inconsistently — `E1`, `1`, `[E1]`, even the raw doc id. We accept a
+    raw doc id, the exact label, or any token carrying the label's number (so `1` and
+    `E1` both resolve to E1). Anything that still doesn't map returns None and is
+    dropped — the citation-resolvability invariant: a brief never carries a fabrication.
     """
+    token = token.strip()
+    if token in valid_ids:
+        return token
+    if token in label_map:
+        return label_map[token]
+    match = _LABEL_NUM_RE.search(token)
+    return label_map.get(f"E{int(match.group())}") if match else None
+
+
+def _resolve_citations(text: str, label_map: dict[str, str]) -> list[str]:
     valid_ids = set(label_map.values())
     out: list[str] = []
     for inner in _CITATION_RE.findall(text):
         for token in re.split(r"[,\s]+", inner.strip()):
-            doc_id = label_map.get(token) or (token if token in valid_ids else None)
+            doc_id = _resolve_label(token, label_map, valid_ids)
             if doc_id and doc_id not in out:
                 out.append(doc_id)
     return out
@@ -121,6 +134,11 @@ def _resolve_citations(text: str, label_map: dict[str, str]) -> list[str]:
 def _assemble(
     query: str, evidence: list[EvidenceItem], state: DeliberationState, backend: str
 ) -> BriefResult:
+    label_map = evidence_labels(evidence)
+    struct = state.get("finding_struct")
+    if struct is not None:
+        return _assemble_from_struct(query, struct, label_map, state, backend)
+
     finding = state.get("finding", "")
     sections = _parse_sections(finding)
     confidence_text = " ".join(sections["CONFIDENCE"])
@@ -132,7 +150,42 @@ def _assemble(
         confidence=confidence_match.group(1).lower() if confidence_match else None,
         alternatives=" ".join(sections["ALTERNATIVES"]) or None,
         gaps=" ".join(sections["INTELLIGENCE GAPS"]) or None,
-        citations=_resolve_citations(finding, evidence_labels(evidence)),
+        citations=_resolve_citations(finding, label_map),
+        hypotheses=state.get("hypotheses", []),
+        backend=backend,
+    )
+
+
+def _assemble_from_struct(
+    query: str,
+    struct: "Finding",
+    label_map: dict[str, str],
+    state: DeliberationState,
+    backend: str,
+) -> BriefResult:
+    """Build the brief from the validated structured finding (the reliable path)."""
+    valid_ids = set(label_map.values())
+    citations: list[str] = []
+    for kj in struct.key_judgments:
+        for label in kj.citations:
+            doc_id = _resolve_label(label, label_map, valid_ids)
+            if doc_id and doc_id not in citations:
+                citations.append(doc_id)
+    key_judgments = [
+        f"{kj.judgment} {' '.join(f'[{c}]' for c in kj.citations)}".rstrip()
+        for kj in struct.key_judgments
+    ]
+    alternatives = struct.alternative_hypothesis or None
+    if alternatives and struct.collection_requirement:
+        alternatives = f"{alternatives} Collection requirement: {struct.collection_requirement}"
+    return BriefResult(
+        query=query,
+        body=state.get("finding", ""),
+        key_judgments=key_judgments,
+        confidence=struct.confidence,
+        alternatives=alternatives,
+        gaps="; ".join(struct.intelligence_gaps) or None,
+        citations=citations,
         hypotheses=state.get("hypotheses", []),
         backend=backend,
     )
