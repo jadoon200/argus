@@ -67,10 +67,27 @@ correct brief should make, and known traps (topics with thin/low-reliability sou
 *right* answer is low confidence + an explicit intelligence gap). Lives under
 `src/argus/eval/`. Kept deliberately small and honest rather than large and noisy.
 
+## Harness status
+
+`make eval` (`argus.eval.run`) scores a fixture gold set (`src/argus/eval/goldset.py`).
+Retrieval metrics are deterministic (LLM-free, CI-safe); brief metrics use whatever backend
+is available (local Ollama, else the template digest).
+
+**Deterministic baseline (template backend, fixture corpus):** mean recall@3 1.00, mean MRR
+1.00, citation coverage 1.00, fabrication attempts caught 0, calibration-trap breaches 0. The
+fixture corpus is small and lexically clean, so retrieval=1.00 mainly guards against
+regressions — the discriminating checks are citation coverage, fabrication, and the trap.
+
+**LLM-path numbers (a deliberated brief vs the digest): pending** a capable local model
+(`qwen2.5:14b`); they land here once measured.
+
 ## Recorded negatives (where it fails)
 
 The honest half. To be filled as found — e.g. thin-source topics where the agent overstates
 confidence, non-English reporting it under-retrieves, coordination false positives on organic
 viral events. Each negative gets characterized (why it fails, when), not hidden.
 
-- _TBD — first negatives land with milestone 4._
+- **Template digest is not calibration-aware** — it is a relevance-ranked evidence digest, so
+  it always reports *low* confidence and makes no analytic judgment. Honest by construction
+  (it never overstates), but it is not a substitute for the deliberated brief.
+- _More land once the LLM-path eval runs on `qwen2.5:14b`._

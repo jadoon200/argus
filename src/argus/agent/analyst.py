@@ -135,7 +135,6 @@ def _assemble(
 def extractive_brief(query: str, evidence: list[EvidenceItem]) -> BriefResult:
     """Deterministic, no-LLM fallback — an evidence digest, honestly labelled as such."""
     top = evidence[:8]
-    sources = {e.source for e in evidence}
     body = "\n".join(
         [f"Evidence digest for: {query}", ""]
         + [f"- {e.rating()} {e.source}: {e.title} [{e.doc_id}]" for e in top]
@@ -144,7 +143,8 @@ def extractive_brief(query: str, evidence: list[EvidenceItem]) -> BriefResult:
         query=query,
         body=body,
         key_judgments=[f"{e.title} [{e.doc_id}]" for e in evidence[:3]],
-        confidence="moderate" if len(sources) >= 3 else "low",
+        # A digest is not an assessment — it never claims more than low confidence.
+        confidence="low",
         gaps=(
             "Produced by the deterministic fallback (no LLM available): a relevance-ranked "
             "evidence digest, not an analytic judgment. Run with Ollama or Claude for a "

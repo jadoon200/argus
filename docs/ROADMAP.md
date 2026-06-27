@@ -11,7 +11,7 @@ demonstrable, deployed MVP well before **~10 Aug 2026**.
 | 1 | Collection — GDELT DOC 2.0 (query-driven) + curated world/agency RSS ingesters → corpus | ✅ done |
 | 2 | Analysis 2a — entity/event extraction + dedup, Admiralty source-reliability scoring, hybrid (BM25 + dense) retrieval | ✅ done |
 | 3 | Analyst agent — **multi-agent ACH deliberation** (LangGraph): hypotheses → analyst ↔ red-team → adjudicator; free-by-default LLM (Ollama / deterministic), citation-resolvable **cited brief** | ✅ done |
-| 4 | Eval harness — gold query set; citation accuracy, faithfulness, retrieval recall, reliability calibration + recorded negatives | ⬜ |
+| 4 | Eval harness — gold query set; retrieval recall/MRR, citation coverage, fabrication-caught, calibration-trap (deterministic) | ✅ done |
 | 5 | FastAPI (`/brief` + read-only graph, hardened) + React dashboard; **deploy live** | ⬜ |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch" panel) | ⬜ |
 | 7 | Cyber-fusion bridge — `query_cyber_graph` tool over Sentinel's read-only API | ⬜ |
