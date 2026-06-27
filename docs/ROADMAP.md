@@ -1,9 +1,9 @@
 # Roadmap
 
-Built honestly: a milestone is only ✅ when it runs and is tested. Today the repo is at
-**scaffold**; the MVP spine (steps 1–5) is the floor to ship, with the two fusion layers
-(6–7) as the extensions that make it "all-source," and polish (8) last. Deadline anchor: a
-demonstrable, deployed MVP well before **~10 Aug 2026**.
+Built honestly: a milestone is only ✅ when it runs and is tested. The agent spine (0–4) is
+complete and the FastAPI layer (5a) is live; React dashboard, narrative watch, and cyber-fusion
+bridge are the remaining work, with live deployment deferred to after those land. Deadline
+anchor: a demonstrable MVP well before **~10 Aug 2026**.
 
 | # | Milestone | Status |
 |---|---|---|
@@ -12,14 +12,14 @@ demonstrable, deployed MVP well before **~10 Aug 2026**.
 | 2 | Analysis 2a — entity/event extraction + dedup, Admiralty source-reliability scoring, hybrid (BM25 + dense) retrieval | ✅ done |
 | 3 | Analyst agent — **multi-agent ACH deliberation** (LangGraph): hypotheses → analyst ↔ red-team → adjudicator; free-by-default LLM (Ollama / deterministic), citation-resolvable **cited brief** | ✅ done |
 | 4 | Eval harness — gold query set; retrieval recall/MRR, citation coverage, fabrication-caught, calibration-trap (deterministic) | ✅ done |
-| 5 | FastAPI (`/brief` + read-only graph, hardened) + React dashboard; **deploy live** | ⬜ |
+| 5a | FastAPI (`/brief` + read-only graph, hardened: rate-limit/concurrency/size-cap guards; `GET /model` observability) | ✅ done |
+| 5b | React / TypeScript dashboard — query box, brief with inline citations + reliability badges, narrative-watch panel | ⬜ |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch" panel) | ⬜ |
 | 7 | Cyber-fusion bridge — `query_cyber_graph` tool over Sentinel's read-only API | ⬜ |
-| 8 | Polish — `MODEL_CARD.md`, fuller `EVAL.md` (judge calibration, multi-seed), demo video, blog post | ⬜ |
+| 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
+| 9 | **Live deployment** — deferred; will follow once 5b + one of {6, 7} land | ⬜ deferred |
 
-**Recommended floor to ship:** steps 0–5 **+ one of {6, 7}**. Ship the agent spine first; treat
-the narrative watch and the cyber bridge as the two extensions that complete the fusion story,
-not prerequisites.
+**Recommended floor to ship:** milestones 0–5a are done. Next: 5b (dashboard) then **one of {6, 7}** to complete the fusion story. Live deployment follows that — it is not imminent.
 
 ## Design decisions already locked
 

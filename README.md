@@ -2,7 +2,8 @@
 
 **All-source intelligence analyst workbench** — fuses the open-source *information*
 environment (global news + events + advisories) into source-rated, **cited intelligence
-briefs**, written by a tool-using analyst agent and held to a measured evaluation bar.
+briefs**, written by a **multi-agent ACH deliberation panel** and held to a measured
+evaluation bar.
 
 > **Sibling to [SENTINEL](../sentinel).** Sentinel fuses the **cyber** threat picture
 > (network intrusions × ATT&CK × CTI). ARGUS fuses the **information** picture
@@ -10,8 +11,9 @@ briefs**, written by a tool-using analyst agent and held to a measured evaluatio
 > on top. The two join: ARGUS can query Sentinel's cyber knowledge graph so one analyst
 > reasons across both — the way an all-source fusion cell actually works.
 
-> **Status:** early build (scaffold → MVP). What runs today and what's planned is tracked
-> honestly in [`docs/ROADMAP.md`](docs/ROADMAP.md); every model/agent claim lands in
+> **Status:** agent spine + API complete; React dashboard, narrative watch, and cyber-fusion
+> bridge planned. What runs today and what's planned is tracked honestly in
+> [`docs/ROADMAP.md`](docs/ROADMAP.md); every model/agent claim lands in
 > [`docs/EVAL.md`](docs/EVAL.md) with the number that survives scrutiny, not a demo cherry-pick.
 
 ## What it does
@@ -23,10 +25,7 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
 2. **Structures** it — extracts entities and events, deduplicates near-identical reports,
    and rates each source on the **NATO Admiralty System** (source reliability A–F ×
    information credibility 1–6), so corroboration and provenance are first-class.
-3. **Watches narratives** — clusters the reporting into narratives and flags
-   **coordination** (suspiciously synchronized pushing of the same message), the
-   information-defence half of the picture.
-4. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
+3. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
    judgment out using real intelligence tradecraft: a panel sets **competing hypotheses**, a
    lead **Analyst** makes the case, a **Red Team** attacks it (disconfirming evidence, weak
    sourcing, state-affiliated narratives), and an **Adjudicator** applies **Analysis of
@@ -35,7 +34,11 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    judgments, a confidence call, the most credible alternative + what would raise it, and
    honest intelligence gaps** — where **every citation resolves to a real ingested document**
    (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
-   local Ollama model (Claude optional), with a deterministic fallback so it always runs.
+   local Ollama model (Claude optional, never required), with a deterministic fallback so it
+   always runs.
+4. *(Planned)* **Watches narratives** — clusters the reporting into narratives and flags
+   **coordination** (suspiciously synchronized pushing of the same message), the
+   information-defence half of the picture.
 
 ## Why it's built this way
 
@@ -45,9 +48,10 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
   where it fails. This eval harness is the point; a RAG demo that nobody graded isn't an
   intelligence tool. See [`docs/EVAL.md`](docs/EVAL.md).
 - **Zero-cost, runs offline.** Free data sources and free/local models only. The LLM layer is
-  **pluggable**: Claude (Anthropic API) when a key is present for best quality, a local model
-  (Ollama / Apple MLX) otherwise, and a deterministic extractive fallback so the product —
-  and the test suite — runs end-to-end with **no key at all**.
+  **pluggable**: local Ollama (`auto` mode; recommended: `qwen2.5:14b`) by default, a
+  deterministic extractive fallback when Ollama is unreachable, and Claude (Anthropic API)
+  as an **opt-in** via `ARGUS_LLM_BACKEND=anthropic` — never selected automatically.
+  The product and test suite run end-to-end with **no API key at all**.
 - **Source-rated, cited, transparent.** No claim without a citation; no source without a
   reliability rating. The Admiralty score is shown, not hidden.
 
@@ -74,8 +78,8 @@ an afterthought.
  │ Layer 2 · Analysis                           │      │
  │  2a entities + events + Admiralty            │      │
  │     source-reliability scoring + retrieval   │      │
- │  2b narrative clustering + coordination       │      │
- │     ("narrative watch")                       │      │
+ │  2b narrative clustering + coordination  ⬜  │      │
+ │     ("narrative watch") — planned            │      │
  └─────────────┬───────────────────────────────┘      │
                ▼                                       ▼
  ┌──────────────────────────────────────────────────────────┐
@@ -86,15 +90,16 @@ an afterthought.
                ▼
         FastAPI (hardened, read-only + 1 agent route)
                ▼
-        React / TypeScript dashboard
+        React / TypeScript dashboard  ⬜ planned
 ```
 
 ## Stack
 
 Python 3.12 · SQLAlchemy 2.0 + Alembic + Postgres · pydantic-settings · httpx + tenacity +
-Prefect (ingestion) · sentence-transformers + BM25 hybrid retrieval · FastAPI (hardened for
-public deploy) · React 19 + TypeScript + Vite. Mirrors Sentinel's stack and conventions so the
-two read as one body of work. ruff + mypy (strict) + pytest gate every change.
+Prefect (ingestion) · sentence-transformers + BM25 hybrid retrieval · LangGraph (multi-agent
+deliberation) · FastAPI (hardened for public deploy) · React 19 + TypeScript + Vite *(planned)*.
+Mirrors Sentinel's stack and conventions so the two read as one body of work.
+ruff + mypy (strict) + pytest gate every change.
 
 ## Quickstart
 
@@ -102,14 +107,15 @@ two read as one body of work. ruff + mypy (strict) + pytest gate every change.
 make env && conda activate argus && make install   # one-time
 make up                                             # Postgres + migrations (Docker)
 make ingest Q="South China Sea"                     # pull open-source reporting on a topic
+make enrich                                         # entity/event extraction + Admiralty scoring
 make brief Q="What happened in the South China Sea this week?"   # generate a cited brief
 make eval                                           # score the agent on the gold set
 make api          # read-only API + agent route on :8000
-make ui           # React dashboard on :5173 (needs make api)
 ```
 
-Everything works with **no API key** (deterministic fallback). Set `ANTHROPIC_API_KEY` for
-the Claude-backed agent, or point `ARGUS_LLM_BACKEND=ollama` at a local model.
+Everything works with **no API key** (deterministic fallback). For best results, run a local
+model via Ollama (`ollama pull qwen2.5:14b`; `llama2` is too weak). To use Claude, set
+`ARGUS_LLM_BACKEND=anthropic` and `ANTHROPIC_API_KEY` — the `auto` mode never selects it.
 
 ## Project context
 

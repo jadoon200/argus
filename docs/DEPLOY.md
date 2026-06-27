@@ -1,5 +1,10 @@
 # Deployment notes — taking ARGUS public
 
+> **Status: forward-looking reference.** Live deployment is deferred until the React dashboard
+> and at least one of {narrative watch, cyber-fusion bridge} land. The API layer
+> (`src/argus/api/`) is built and hardened; the notes below document the production posture
+> for when that time comes.
+
 The dashboard API (`src/argus/api/app.py`) is read-only over the knowledge graph apart from one
 expensive route: `POST /brief`, which runs retrieval + the analyst agent (and, if configured, a
 remote LLM call). That route is the only meaningful resource-exhaustion and cost vector.
@@ -21,7 +26,7 @@ is the primary defence.
 | `ARGUS_API_TRUST_FORWARDED_HEADER` | `false` | Derive the per-client rate-limit key from the first `X-Forwarded-For` hop. Leave **off** unless behind a trusted proxy that sets it — on a directly-exposed server the header is client-controlled and spoofable. Set `true` only behind the reverse proxy below. |
 | `ARGUS_API_INFERENCE_CONCURRENCY` | `2` | Hard cap on simultaneous brief generations; bounds peak RAM/CPU and concurrent LLM calls. Excess requests wait, then `503`. |
 | `ARGUS_API_INFERENCE_ACQUIRE_TIMEOUT_SECONDS` | `15` | How long a request waits for a free slot before `503`. |
-| `ARGUS_LLM_BACKEND` | `auto` | `auto` (Claude if key present, else local, else deterministic), `anthropic`, `ollama`, `mlx`, or `template`. In a public deploy without a budget, pin `template` or `ollama` so a traffic spike can't run up an API bill. |
+| `ARGUS_LLM_BACKEND` | `auto` | `auto` (local Ollama if reachable, else deterministic template — **never** auto-selects the paid Claude), `anthropic` (opt-in, needs `ANTHROPIC_API_KEY`), `ollama`, or `template`. In a public deploy, pin `template` or `ollama` so a traffic spike can't run up an API bill. |
 
 The rate limiter and concurrency cap are **single-process, in-memory**. With multiple workers
 each gets its own counters — fine for a small deployment; for real limits put them at the proxy.
@@ -31,9 +36,7 @@ each gets its own counters — fine for a small deployment; for real limits put 
 - **Reverse proxy (nginx / Caddy)** — the primary defence: `client_max_body_size`, `limit_req`
   for cross-worker rate limiting, TLS termination. Set `ARGUS_API_ALLOWED_ORIGINS` to the
   `https://` origin; forward the real client IP and set `ARGUS_API_TRUST_FORWARDED_HEADER=true`.
-- **Cap the LLM cost.** If the deployed agent uses the Anthropic backend, the concurrency cap +
-  rate limit bound spend, but the real safety valve is pinning `ARGUS_LLM_BACKEND=template` or
-  `ollama` for the public demo. Never expose an un-throttled remote-LLM route.
+- **Cap the LLM cost.** If the deployed agent uses the Anthropic backend (`ARGUS_LLM_BACKEND=anthropic`), the concurrency cap + rate limit bound spend, but the real safety valve is pinning `ARGUS_LLM_BACKEND=template` or `ollama` for the public demo. Never expose an un-throttled remote-LLM route. Note: `auto` mode never touches the paid backend on its own.
 - **Don't expose the dev server.** Run uvicorn behind the proxy with a sane worker count
   (`uvicorn ... --workers N`), not bound to a public interface.
 - **Database** — Postgres stays on a private network; never expose it. Secrets via env only.

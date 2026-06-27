@@ -7,10 +7,14 @@
 ## Overview
 
 ARGUS is an **all-source open-source-intelligence (OSINT) analysis aid**. Its central artifact
-is a **cited intelligence brief**: given an analyst query, a tool-using agent retrieves over a
-corpus of open-source reporting (GDELT global news + curated RSS) and composes a structured
-assessment — key judgments, evidence with source-reliability ratings, a timeline, a confidence
-call, and intelligence gaps — with every claim cited to a real ingested document.
+is a **cited intelligence brief**: given an analyst query, a **multi-agent deliberation panel**
+(LangGraph) retrieves over a corpus of open-source reporting (GDELT global news + curated RSS)
+and argues the judgment out using real intelligence tradecraft — competing hypotheses,
+analyst ↔ red-team debate, ACH adjudication (favour the least-disconfirmed hypothesis), and
+IC estimative language (ICD 203 / Sherman Kent) — to produce a structured assessment: key
+judgments, a confidence call, the most credible alternative, intelligence gaps, and inline
+citations that **all resolve to real ingested documents** (fabricated citations are dropped,
+never shown).
 
 It is **decision support for a human analyst**, not an autonomous decision-maker.
 
@@ -47,8 +51,11 @@ itself evaluated (`docs/EVAL.md` §4).
 
 ## LLM backends
 
-Pluggable: deterministic extractive briefer (always-on, no key), local (Ollama / Apple MLX),
-or Claude (Anthropic API, best quality, optional). All are scored on the same gold set so the
+Pluggable, free by default. `auto` mode selects local Ollama if reachable (recommended:
+`qwen2.5:14b` on an M3 Pro; `llama2` is too weak) and otherwise falls back to the
+deterministic extractive briefer — which always runs with no key and honestly reports only
+`low` confidence. Claude (Anthropic API) is **opt-in only**, never auto-selected; set
+`ARGUS_LLM_BACKEND=anthropic` to use it. All backends are scored on the same gold set so the
 key-free floor is explicit.
 
 ## Evaluation

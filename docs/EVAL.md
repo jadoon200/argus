@@ -57,8 +57,8 @@ the cost of running key-free is explicit and honest.
 | Backend | Citation support | Faithfulness | Notes |
 |---|---|---|---|
 | deterministic (extractive) | TBD | TBD | always-on floor; no key |
-| local (Ollama / MLX) | TBD | TBD | |
-| Claude (Anthropic API) | TBD | TBD | best quality, optional |
+| local Ollama (`qwen2.5:14b`) | TBD | TBD | recommended; `llama2` too weak |
+| Claude (Anthropic API) | TBD | TBD | best quality, opt-in only |
 
 ## Gold set
 
