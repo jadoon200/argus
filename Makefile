@@ -55,6 +55,11 @@ brief:
 eval:
 	python -m argus.eval.run
 
+# Compile (optimize) the brief prompt against the eval metric on the local model.
+# Needs the optimize extra: pip install -e .[optimize]
+optimize:
+	python -m argus.optimize.compile
+
 # Serve the read-only API + the agent /brief route on :8000
 api:
 	uvicorn argus.api.app:app --reload

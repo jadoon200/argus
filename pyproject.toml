@@ -31,6 +31,8 @@ anthropic = ["anthropic>=0.40"]
 nlp = ["spacy>=3.7"]
 # Apple-silicon local LLM backend (optional, darwin-only).
 mlx = ["mlx-lm>=0.19; sys_platform == 'darwin'"]
+# DSPy prompt optimization (optional; `make optimize`). Heavy — not a runtime dep.
+optimize = ["dspy>=3.2"]
 
 [dependency-groups]
 dev = [
@@ -79,6 +81,7 @@ module = [
     "defusedxml.*",
     "langgraph.*",
     "anthropic.*",
+    "dspy.*",
 ]
 ignore_missing_imports = true
 
@@ -86,6 +89,13 @@ ignore_missing_imports = true
 # to the flow module only — do not widen it.
 [[tool.mypy.overrides]]
 module = ["argus.ingest.flows"]
+disallow_untyped_decorators = false
+
+# DSPy Signatures/Modules subclass untyped (Any) base classes; scope that exception
+# to the optimization package only.
+[[tool.mypy.overrides]]
+module = ["argus.optimize.*"]
+disallow_subclassing_any = false
 disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
