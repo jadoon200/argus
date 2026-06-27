@@ -57,15 +57,22 @@ class Settings(BaseSettings):
     coordination_window_hours: float = 6.0
 
     # --- Analyst agent (Layer 3) ------------------------------------------------------
-    # auto -> Claude if a key is present, else ollama if reachable, else template.
-    # Explicit values: "anthropic" | "ollama" | "mlx" | "template".
+    # auto -> local Ollama if reachable, else the deterministic template backend.
+    # auto NEVER selects the paid Claude backend (zero-cost by default); set
+    # llm_backend="anthropic" explicitly to use it. Values: "ollama" | "anthropic" |
+    # "template" | "auto".
     llm_backend: str = "auto"
     anthropic_api_key: str | None = None  # also read from ANTHROPIC_API_KEY (see agent/llm.py)
     anthropic_model: str = "claude-opus-4-8"
     ollama_url: str = "http://localhost:11434"
+    # Preferred Ollama model; the backend auto-falls back to any installed model if
+    # this one is absent (so the agent runs with whatever the user has pulled).
     ollama_model: str = "llama3.1"
-    mlx_model: str = "mlx-community/Llama-3.1-8B-Instruct-4bit"
-    brief_context_docs: int = 12  # documents handed to the briefer per query
+    # Agents deliberate (multiple LLM calls); give them room rather than racing them.
+    llm_timeout_seconds: float = 180.0
+    brief_context_docs: int = 12  # documents of evidence handed to the agents per query
+    num_hypotheses: int = 3  # competing hypotheses the ACH stage generates
+    debate_rounds: int = 1  # analyst <-> red-team exchanges before adjudication
 
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.

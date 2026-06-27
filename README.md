@@ -26,11 +26,16 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
 3. **Watches narratives** — clusters the reporting into narratives and flags
    **coordination** (suspiciously synchronized pushing of the same message), the
    information-defence half of the picture.
-4. **Writes a brief** — a tool-using agent retrieves across the corpus (and, optionally,
-   Sentinel's cyber graph) and produces a structured intelligence brief: **key judgments,
-   supporting evidence with reliability ratings, a timeline, a confidence call, and the
-   intelligence gaps** — every claim carrying an inline citation back to a real ingested
-   document.
+4. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
+   judgment out using real intelligence tradecraft: a panel sets **competing hypotheses**, a
+   lead **Analyst** makes the case, a **Red Team** attacks it (disconfirming evidence, weak
+   sourcing, state-affiliated narratives), and an **Adjudicator** applies **Analysis of
+   Competing Hypotheses** (favour the *least-disconfirmed* hypothesis) and issues a finding in
+   the IC's estimative language (ICD 203 / Kent). The result is a structured brief — **key
+   judgments, a confidence call, the most credible alternative + what would raise it, and
+   honest intelligence gaps** — where **every citation resolves to a real ingested document**
+   (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
+   local Ollama model (Claude optional), with a deterministic fallback so it always runs.
 
 ## Why it's built this way
 

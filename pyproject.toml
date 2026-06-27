@@ -72,6 +72,8 @@ module = [
     "mlx_lm.*",
     "prefect.*",
     "defusedxml.*",
+    "langgraph.*",
+    "anthropic.*",
 ]
 ignore_missing_imports = true
 

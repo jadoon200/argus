@@ -16,5 +16,6 @@ sentence-transformers>=3.0
 rank-bm25>=0.2.2
 numpy>=1.26
 scikit-learn>=1.5
+langgraph>=0.2
 fastapi>=0.115
 uvicorn>=0.30
