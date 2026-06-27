@@ -1,0 +1,11 @@
+# Slim runtime for the read-only API image (Dockerfile.api) — no ML stack.
+# The deployed demo pins ARGUS_LLM_BACKEND=template, so no LLM SDK is needed here.
+sqlalchemy>=2.0
+psycopg[binary]>=3.2
+pydantic>=2.7
+pydantic-settings>=2.3
+httpx>=0.27
+rank-bm25>=0.2.2
+numpy>=1.26
+fastapi>=0.115
+uvicorn>=0.30
