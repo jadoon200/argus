@@ -7,8 +7,8 @@ demonstrable, deployed MVP well before **~10 Aug 2026**.
 
 | # | Milestone | Status |
 |---|---|---|
-| 0 | Repo scaffold, packaging, Docker Compose (Postgres), config, DB models, CI gate | 🔨 in progress |
-| 1 | Collection — GDELT DOC 2.0 (query-driven) + curated world/agency RSS ingesters → corpus | ⬜ |
+| 0 | Repo scaffold, packaging, Docker Compose (Postgres), config, DB models, CI gate | ✅ done |
+| 1 | Collection — GDELT DOC 2.0 (query-driven) + curated world/agency RSS ingesters → corpus | ✅ done |
 | 2 | Analysis 2a — entity/event extraction + dedup, Admiralty source-reliability scoring, hybrid (BM25 + dense) retrieval | ⬜ |
 | 3 | Analyst agent — pluggable LLM (Claude / local / deterministic fallback) + tools → **cited brief** | ⬜ |
 | 4 | Eval harness — gold query set; citation accuracy, faithfulness, retrieval recall, reliability calibration + recorded negatives | ⬜ |
