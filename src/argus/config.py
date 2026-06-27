@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     # or its model is unavailable, so the pipeline always runs.
     ner_backend: str = "spacy"
     spacy_model: str = "en_core_web_sm"
-    # Event dedup: two documents merge into one event above this title/summary cosine.
+    # Event dedup: two documents merge into one event above this title/summary cosine
+    # and within this many days of each other.
     event_dedup_threshold: float = 0.78
+    event_window_days: float = 3.0
     # Hybrid retrieval: reciprocal-rank-fusion constant and default depth.
     retrieval_top_k: int = 10
     rrf_k: int = 60
