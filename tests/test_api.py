@@ -1,0 +1,95 @@
+from collections.abc import Iterator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from argus.api import app as app_module
+from argus.api.app import app, get_db
+from argus.api.limits import RateLimiter
+from argus.db import models  # noqa: F401
+from argus.db.base import Base
+from argus.db.models import Document, Source
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as seed:
+        seed.add(Source(label="reuters.com", name="Reuters", kind="wire", reliability="B"))
+        seed.add(
+            Document(
+                doc_id="reuters.com:1",
+                source="reuters.com",
+                title="Standoff at the disputed reef",
+                summary="Coast guard vessels confronted boats at the reef.",
+                credibility=3,
+            )
+        )
+        seed.commit()
+
+    def override_db() -> Iterator[Session]:
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    # Force the deterministic template backend (no Ollama/network in tests).
+    monkeypatch.setattr("argus.agent.analyst.resolve_backend", lambda: None)
+    monkeypatch.setattr("argus.api.app.resolve_backend", lambda: None)
+    monkeypatch.setattr("argus.api.app.ollama_models", lambda url: [])
+    app.dependency_overrides[get_db] = override_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_health(client: TestClient) -> None:
+    r = client.get("/health")
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+
+
+def test_model_info_exposes_active_backend(client: TestClient) -> None:
+    body = client.get("/model").json()
+    assert body["active"] == "template"  # forced in the fixture
+    assert "configured" in body and "ollama_models" in body
+
+
+def test_stats_and_sources(client: TestClient) -> None:
+    stats = client.get("/stats").json()
+    assert stats["documents"] == 1 and stats["sources"] == 1
+    sources = client.get("/sources").json()
+    assert sources[0]["reliability"] == "B"
+
+
+def test_brief_roundtrip_persists(client: TestClient) -> None:
+    r = client.post("/brief", json={"query": "standoff at the disputed reef"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backend"] == "template"
+    assert "reuters.com:1" in body["citations"]
+    # it was persisted and is now listable
+    listed = client.get("/briefs").json()
+    assert len(listed) == 1
+    assert client.get(f"/briefs/{listed[0]['brief_id']}").status_code == 200
+
+
+def test_brief_rejects_oversized_query(client: TestClient) -> None:
+    r = client.post("/brief", json={"query": "x" * 5000})
+    assert r.status_code == 422
+
+
+def test_brief_rate_limited(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_module, "_rate_limiter", RateLimiter(1, 60.0, False))
+    assert client.post("/brief", json={"query": "first"}).status_code == 200
+    assert client.post("/brief", json={"query": "second"}).status_code == 429
+
+
+def test_unknown_brief_404(client: TestClient) -> None:
+    assert client.get("/briefs/999").status_code == 404

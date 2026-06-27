@@ -56,6 +56,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+# FastAPI's Depends()/Query() in argument defaults are the framework idiom, not the
+# mutable-default bug B008 targets.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

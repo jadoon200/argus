@@ -44,7 +44,13 @@ def gather_evidence(session: Session, query: str, k: int) -> list[EvidenceItem]:
         return []
     has_embeddings = any(d.embedding for d in docs)
     rdocs = [RetrievedDoc(d.doc_id, _doc_text(d), d.embedding) for d in docs]
-    query_vec = embed_text(query) if has_embeddings else None
+    query_vec = None
+    if has_embeddings:
+        try:
+            query_vec = embed_text(query)
+        except ImportError:
+            # Slim deployments ship without sentence-transformers — degrade to BM25.
+            log.warning("embeddings_unavailable_lexical_only")
     ranked = hybrid_search(query, rdocs, query_vec, top_k=k)
 
     by_id = {d.doc_id: d for d in docs}
