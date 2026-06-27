@@ -91,10 +91,14 @@ def render_finding(finding: Finding) -> str:
     alt = finding.alternative_hypothesis
     if finding.collection_requirement:
         alt = f"{alt} Collection requirement: {finding.collection_requirement}".strip()
+    assumptions = "; ".join(finding.key_assumptions) or "(none stated)"
+    indicators = "; ".join(finding.indicators) or "(none stated)"
     gaps = "; ".join(finding.intelligence_gaps) or "(none stated)"
     return (
         f"KEY JUDGMENTS:\n{judgments}\n\n"
         f"CONFIDENCE: {finding.confidence} — {finding.confidence_rationale}\n\n"
+        f"KEY ASSUMPTIONS: {assumptions}\n\n"
+        f"INDICATORS: {indicators}\n\n"
         f"ALTERNATIVES: {alt or '(none stated)'}\n\n"
         f"INTELLIGENCE GAPS: {gaps}"
     )

@@ -50,6 +50,8 @@ class BriefResult:
     body: str
     key_judgments: list[str] = field(default_factory=list)
     confidence: str | None = None
+    key_assumptions: list[str] = field(default_factory=list)
+    indicators: list[str] = field(default_factory=list)
     alternatives: str | None = None
     gaps: str | None = None
     citations: list[str] = field(default_factory=list)

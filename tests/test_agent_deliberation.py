@@ -43,6 +43,8 @@ class FakeBackend:
                         ],
                         "confidence": "moderate",
                         "confidence_rationale": "limited corroboration",
+                        "key_assumptions": ["the deployment reporting is accurate"],
+                        "indicators": ["additional naval movements near the reef"],
                         "alternative_hypothesis": "H2 routine activity is plausible",
                         "collection_requirement": "more independent sources",
                         "intelligence_gaps": ["intentions are unknown"],
@@ -79,6 +81,9 @@ def test_generate_brief_assembles_and_validates_citations() -> None:
     assert result.citations == ["reuters.com:1"]
     assert result.alternatives and "routine" in result.alternatives
     assert result.gaps and "intentions" in result.gaps.lower()
+    # Structured Analytic Techniques surfaced in the brief.
+    assert result.key_assumptions == ["the deployment reporting is accurate"]
+    assert result.indicators == ["additional naval movements near the reef"]
 
 
 def test_template_fallback_is_labelled_digest() -> None:

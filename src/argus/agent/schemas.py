@@ -20,11 +20,18 @@ class KeyJudgment(BaseModel):
 
 
 class Finding(BaseModel):
-    """The adjudicator's structured finding — the brief's backbone."""
+    """The adjudicator's structured finding — the brief's backbone.
+
+    Carries two Structured Analytic Techniques alongside the judgments: a Key
+    Assumptions Check (the load-bearing assumptions the assessment rests on) and
+    Indicators & Warnings (observable developments that would confirm or refute it).
+    """
 
     key_judgments: list[KeyJudgment] = Field(default_factory=list)
     confidence: Literal["low", "moderate", "high"] = "low"
     confidence_rationale: str = ""
+    key_assumptions: list[str] = Field(default_factory=list)  # Key Assumptions Check
+    indicators: list[str] = Field(default_factory=list)  # Indicators & Warnings to watch
     alternative_hypothesis: str = ""
     collection_requirement: str = ""
     intelligence_gaps: list[str] = Field(default_factory=list)

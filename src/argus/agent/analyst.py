@@ -171,6 +171,10 @@ def _assemble_from_struct(
             doc_id = _resolve_label(label, label_map, valid_ids)
             if doc_id and doc_id not in citations:
                 citations.append(doc_id)
+    # Also pick up citations elsewhere in the finding (e.g. the alternative hypothesis).
+    for doc_id in _resolve_citations(state.get("finding", ""), label_map):
+        if doc_id not in citations:
+            citations.append(doc_id)
     key_judgments = [
         f"{kj.judgment} {' '.join(f'[{c}]' for c in kj.citations)}".rstrip()
         for kj in struct.key_judgments
@@ -183,6 +187,8 @@ def _assemble_from_struct(
         body=state.get("finding", ""),
         key_judgments=key_judgments,
         confidence=struct.confidence,
+        key_assumptions=struct.key_assumptions,
+        indicators=struct.indicators,
         alternatives=alternatives,
         gaps="; ".join(struct.intelligence_gaps) or None,
         citations=citations,
@@ -267,6 +273,12 @@ def render(result: BriefResult) -> str:
     ]
     lines += [f"  • {kj}" for kj in (result.key_judgments or ["(none)"])]
     lines += ["", f"CONFIDENCE: {result.confidence or 'n/a'}"]
+    if result.key_assumptions:
+        lines += ["", "KEY ASSUMPTIONS"]
+        lines += [f"  • {a}" for a in result.key_assumptions]
+    if result.indicators:
+        lines += ["", "INDICATORS & WARNINGS"]
+        lines += [f"  • {i}" for i in result.indicators]
     if result.alternatives:
         lines += ["", f"ALTERNATIVE HYPOTHESIS: {result.alternatives}"]
     if result.gaps:
