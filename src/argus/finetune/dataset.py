@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from argus.agent.analyst import gather_evidence, generate_brief
 from argus.agent.llm import LLMBackend, resolve_backend
-from argus.agent.personas import ARGUS_IDENTITY
+from argus.agent.personas import ONESHOT_SYSTEM
 from argus.agent.state import EvidenceItem, format_evidence
 from argus.config import get_settings
 from argus.db.base import session_scope
@@ -49,11 +49,9 @@ DISTILL_QUERIES: list[str] = [
     "What is driving migration flows across the Mediterranean?",
 ]
 
-TRAIN_SYSTEM = (
-    ARGUS_IDENTITY + "\n\nProduce the intelligence brief directly in these sections: KEY JUDGMENTS "
-    "(each ending with its [E#] citation), CONFIDENCE, KEY ASSUMPTIONS, INDICATORS, "
-    "ALTERNATIVES, INTELLIGENCE GAPS."
-)
+# The training target's system prompt IS the one-shot serving prompt — so the student is
+# trained and served identically (see argus.agent.personas.ONESHOT_SYSTEM).
+TRAIN_SYSTEM = ONESHOT_SYSTEM
 
 
 def to_chat_example(query: str, evidence_block: str, brief_body: str) -> dict[str, Any]:

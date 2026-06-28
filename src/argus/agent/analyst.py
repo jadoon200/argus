@@ -17,8 +17,15 @@ from sqlalchemy.orm import Session
 
 from argus.agent.graph import run_deliberation
 from argus.agent.llm import LLMBackend, resolve_backend
+from argus.agent.personas import ONESHOT_SYSTEM
 from argus.agent.schemas import Finding
-from argus.agent.state import BriefResult, DeliberationState, EvidenceItem, evidence_labels
+from argus.agent.state import (
+    BriefResult,
+    DeliberationState,
+    EvidenceItem,
+    evidence_labels,
+    format_evidence,
+)
 from argus.bridge.sentinel import cyber_evidence
 from argus.config import get_settings
 from argus.db.base import session_scope
@@ -255,6 +262,27 @@ def extractive_brief(query: str, evidence: list[EvidenceItem]) -> BriefResult:
     )
 
 
+def oneshot_brief(query: str, evidence: list[EvidenceItem], backend: LLMBackend) -> BriefResult:
+    """A single-shot brief from `backend` — the fine-tuned student's intended mode. One LLM
+    call with the *same* prompt the student was trained on (`ONESHOT_SYSTEM`), parsed into a
+    cited brief and held to the same resolvability invariant (fabricated labels dropped)."""
+    user = f"QUESTION: {query}\n\nEVIDENCE:\n{format_evidence(evidence)}"
+    text = backend.complete(ONESHOT_SYSTEM, user)
+    sections = _parse_sections(text)
+    label_map = evidence_labels(evidence)
+    confidence_match = _CONFIDENCE_RE.search(" ".join(sections["CONFIDENCE"]))
+    return BriefResult(
+        query=query,
+        body=text,
+        key_judgments=[_strip_bullet(line) for line in sections["KEY JUDGMENTS"]],
+        confidence=confidence_match.group(1).lower() if confidence_match else None,
+        alternatives=" ".join(sections["ALTERNATIVES"]) or None,
+        gaps=" ".join(sections["INTELLIGENCE GAPS"]) or None,
+        citations=_resolve_citations(text, label_map),
+        backend=backend.name,
+    )
+
+
 def generate_brief(
     query: str,
     *,
@@ -273,7 +301,8 @@ def generate_brief(
         # (no-op by default). Cyber items become citable evidence alongside the news.
         evidence = evidence + cyber_evidence()
 
-    if backend is _AUTO and get_settings().brief_mode == "dspy":
+    mode = get_settings().brief_mode
+    if backend is _AUTO and mode == "dspy":
         # Optimized single-shot path. Lazy import: the `optimize` extra (DSPy) must not be
         # a hard dependency of the core serving flow.
         from argus.optimize.serve import optimized_brief
@@ -283,6 +312,10 @@ def generate_brief(
         resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
         if resolved is None:
             result = extractive_brief(query, evidence)
+        elif mode == "student":
+            # One-shot the brief from the backend (the distilled student's intended use),
+            # instead of running it through the multi-agent panel it wasn't trained for.
+            result = oneshot_brief(query, evidence, resolved)
         else:
             state = run_deliberation(query, evidence, resolved)
             result = _assemble(query, evidence, state, resolved.name)
