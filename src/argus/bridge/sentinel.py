@@ -44,6 +44,30 @@ class SentinelBridge:
         resp.raise_for_status()
         return resp.json()
 
+    def _post(self, path: str, payload: dict[str, Any]) -> Any:
+        resp = httpx.post(f"{self._url}{path}", json=payload, timeout=self._timeout)
+        resp.raise_for_status()
+        return resp.json()
+
+    def map_techniques(self, text: str, min_score: float = 0.0) -> list[str] | None:
+        """ATT&CK technique ids SENTINEL's zero-shot mapper finds in `text` (score >=
+        `min_score`). Returns ``None`` if the mapper is unavailable — so the caller can fall
+        back to salience order rather than wrongly suppressing all cyber evidence."""
+        try:
+            data = self._post("/map-techniques", {"text": text})
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("sentinel_map_techniques_failed", error=str(exc))
+            return None
+        if not isinstance(data, list):
+            return None
+        return [
+            str(m["technique_id"])
+            for m in data
+            if isinstance(m, dict)
+            and m.get("technique_id")
+            and float(m.get("score") or 0.0) >= min_score
+        ]
+
     def available(self) -> bool:
         try:
             self._get("/health")
@@ -60,17 +84,44 @@ class SentinelBridge:
         rows = data if isinstance(data, list) else data.get("campaigns", [])
         return [r for r in rows if isinstance(r, dict)]
 
-    def campaigns_as_evidence(self, limit: int = 5) -> list[EvidenceItem]:
+    def _rank_by_relevance(
+        self, campaigns: list[dict[str, Any]], query: str, min_score: float
+    ) -> list[dict[str, Any]]:
+        """Keep only campaigns whose ATT&CK techniques overlap the techniques SENTINEL maps
+        the `query` to, ranked by overlap. Mapper down → keep salience order (don't suppress);
+        query maps to no cyber techniques → no cyber evidence (the brief just isn't cyber)."""
+        relevant = self.map_techniques(query, min_score)
+        if relevant is None:
+            return campaigns
+        if not relevant:
+            return []
+        relevant_set = set(relevant)
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for c in campaigns:
+            techs = set(_technique_ids(c.get("techniques") or c.get("technique_ids")))
+            overlap = len(techs & relevant_set)
+            if overlap:
+                scored.append((overlap, c))
+        scored.sort(key=lambda x: -x[0])  # stable: SENTINEL's salience order breaks ties
+        return [c for _, c in scored]
+
+    def campaigns_as_evidence(
+        self, limit: int = 5, query: str | None = None, min_score: float = 0.0
+    ) -> list[EvidenceItem]:
         """Map SENTINEL campaigns to rated evidence items the analyst can cite.
 
         SENTINEL's `/campaigns` returns ALL campaigns, already sorted most-salient first
         (actively-exploited → freshest → best-corroborated), with `techniques` as objects
         and `kev_cves`/`age_days` alongside — so we cap client-side, pull the technique ids
         out of the objects, and fold KEV (confirmed exploitation in the wild) and recency
-        into both the summary and the credibility.
+        into both the summary and the credibility. With a `query`, only campaigns relevant
+        to it (technique overlap via SENTINEL's mapper) are kept.
         """
+        campaigns = self.campaigns(limit)
+        if query:
+            campaigns = self._rank_by_relevance(campaigns, query, min_score)
         items: list[EvidenceItem] = []
-        for c in self.campaigns(limit)[:limit]:  # server ignores `limit`; cap here
+        for c in campaigns[:limit]:  # server ignores `limit`; cap here
             cid = str(c.get("campaign_id") or c.get("id") or "?")
             cves = [str(x) for x in (c.get("cve_ids") or [])]
             kev = [str(x) for x in (c.get("kev_cves") or [])]
@@ -107,8 +158,12 @@ class SentinelBridge:
         return items
 
 
-def cyber_evidence(settings: Settings | None = None, limit: int = 5) -> list[EvidenceItem]:
-    """Relevant SENTINEL cyber campaigns as evidence, or [] when the bridge is off."""
+def cyber_evidence(
+    settings: Settings | None = None, limit: int = 5, query: str | None = None
+) -> list[EvidenceItem]:
+    """SENTINEL cyber campaigns relevant to `query` as evidence, or [] when the bridge is
+    off. With no `query` (or `sentinel_relevance_min_score=0`) returns the top-salient
+    campaigns; with one, only campaigns whose techniques relate to the query."""
     s = settings or get_settings()
     if not s.sentinel_api_url:
         return []
@@ -116,4 +171,7 @@ def cyber_evidence(settings: Settings | None = None, limit: int = 5) -> list[Evi
     if not bridge.available():
         log.warning("sentinel_bridge_unreachable", url=s.sentinel_api_url)
         return []
-    return bridge.campaigns_as_evidence(limit)
+    relevance_query = query if s.sentinel_relevance_min_score > 0 else None
+    return bridge.campaigns_as_evidence(
+        limit, query=relevance_query, min_score=s.sentinel_relevance_min_score
+    )

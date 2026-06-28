@@ -269,9 +269,9 @@ def generate_brief(
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
         evidence = gather_evidence(session, query, get_settings().brief_context_docs)
-        # All-source fusion: append cyber campaigns from SENTINEL when the bridge is on
-        # (no-op by default). Cyber items become citable evidence alongside the news.
-        evidence = evidence + cyber_evidence()
+        # All-source fusion: append SENTINEL cyber campaigns *relevant to the query* when
+        # the bridge is on (no-op by default). Cyber items become citable evidence.
+        evidence = evidence + cyber_evidence(query=query)
 
     resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
     if resolved is None:

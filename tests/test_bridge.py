@@ -95,3 +95,78 @@ def test_bridge_caps_results_client_side() -> None:
 def test_cyber_evidence_empty_when_unreachable() -> None:
     respx.get("http://sentinel.test/health").mock(return_value=httpx.Response(503))
     assert cyber_evidence(_settings(sentinel_api_url="http://sentinel.test")) == []
+
+
+def _campaign(cid: str, technique_ids: list[str]) -> dict[str, object]:
+    return {
+        "campaign_id": cid,
+        "cve_ids": [],
+        "kev_cves": [],
+        "report_count": 2,
+        "techniques": [
+            {"technique_id": t, "name": t, "score": 0.5, "corroborations": 1} for t in technique_ids
+        ],
+        "age_days": None,
+    }
+
+
+_RELEVANCE_CAMPAIGNS = [
+    _campaign("c1", ["T1190", "T1059"]),  # overlap 2 with a {T1190,T1059} query
+    _campaign("c2", ["T1190"]),  # overlap 1
+    _campaign("c3", ["T9999"]),  # overlap 0 -> dropped
+]
+
+
+def _mock_graph(map_techniques: object) -> None:
+    respx.get("http://sentinel.test/campaigns").mock(
+        return_value=httpx.Response(200, json=_RELEVANCE_CAMPAIGNS)
+    )
+    respx.post("http://sentinel.test/map-techniques").mock(return_value=map_techniques)
+
+
+@respx.mock
+def test_query_relevance_filters_and_ranks_by_overlap() -> None:
+    # Query maps to T1190 + T1059 (above threshold) and T1036 (below, ignored).
+    _mock_graph(
+        httpx.Response(
+            200,
+            json=[
+                {"technique_id": "T1190", "name": "x", "score": 0.35, "corroborations": 2},
+                {"technique_id": "T1059", "name": "y", "score": 0.30, "corroborations": 1},
+                {"technique_id": "T1036", "name": "z", "score": 0.05, "corroborations": 1},
+            ],
+        )
+    )
+    items = SentinelBridge("http://sentinel.test").campaigns_as_evidence(
+        limit=5, query="exploitation", min_score=0.25
+    )
+    # c1 (overlap 2) before c2 (overlap 1); c3 (no overlap) dropped entirely.
+    assert [i.doc_id for i in items] == ["sentinel-cyber:c1", "sentinel-cyber:c2"]
+
+
+@respx.mock
+def test_query_with_no_relevant_techniques_yields_no_cyber() -> None:
+    # Everything the mapper returns is below threshold -> the query isn't cyber -> [].
+    _mock_graph(
+        httpx.Response(
+            200, json=[{"technique_id": "T1036", "name": "z", "score": 0.05, "corroborations": 1}]
+        )
+    )
+    items = SentinelBridge("http://sentinel.test").campaigns_as_evidence(
+        limit=5, query="fishing dispute", min_score=0.25
+    )
+    assert items == []
+
+
+@respx.mock
+def test_mapper_unavailable_falls_back_to_salience() -> None:
+    # Mapper down -> keep SENTINEL's salience order rather than suppressing all cyber.
+    _mock_graph(httpx.Response(503))
+    items = SentinelBridge("http://sentinel.test").campaigns_as_evidence(
+        limit=5, query="anything", min_score=0.25
+    )
+    assert [i.doc_id for i in items] == [
+        "sentinel-cyber:c1",
+        "sentinel-cyber:c2",
+        "sentinel-cyber:c3",
+    ]
