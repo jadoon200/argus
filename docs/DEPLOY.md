@@ -1,7 +1,7 @@
 # Deployment notes — taking ARGUS public
 
 > **Status: forward-looking reference.** Live deployment is deferred until the React dashboard
-> and at least one of {narrative watch, cyber-fusion bridge} land. The API layer
+> lands (narrative watch and the cyber-fusion bridge are already done). The API layer
 > (`src/argus/api/`) is built and hardened; the notes below document the production posture
 > for when that time comes.
 
@@ -26,7 +26,7 @@ is the primary defence.
 | `ARGUS_API_TRUST_FORWARDED_HEADER` | `false` | Derive the per-client rate-limit key from the first `X-Forwarded-For` hop. Leave **off** unless behind a trusted proxy that sets it — on a directly-exposed server the header is client-controlled and spoofable. Set `true` only behind the reverse proxy below. |
 | `ARGUS_API_INFERENCE_CONCURRENCY` | `2` | Hard cap on simultaneous brief generations; bounds peak RAM/CPU and concurrent LLM calls. Excess requests wait, then `503`. |
 | `ARGUS_API_INFERENCE_ACQUIRE_TIMEOUT_SECONDS` | `15` | How long a request waits for a free slot before `503`. |
-| `ARGUS_LLM_BACKEND` | `auto` | `auto` (local Ollama if reachable, else deterministic template — **never** auto-selects the paid Claude), `anthropic` (opt-in, needs `ANTHROPIC_API_KEY`), `ollama`, or `template`. In a public deploy, pin `template` or `ollama` so a traffic spike can't run up an API bill. |
+| `ARGUS_LLM_BACKEND` | `auto` | `auto` (local Ollama if reachable, else deterministic template — **never** auto-selects the paid Claude), `ollama`, `mlx` (Apple-Silicon local), `openai` (any OpenAI-compatible server; free when local), `anthropic` (opt-in, needs `ANTHROPIC_API_KEY`), or `template`. In a public deploy, pin `template` or a local backend so a traffic spike can't run up an API bill. |
 
 The rate limiter and concurrency cap are **single-process, in-memory**. With multiple workers
 each gets its own counters — fine for a small deployment; for real limits put them at the proxy.

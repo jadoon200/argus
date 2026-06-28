@@ -10,11 +10,16 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0001_initial"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+# Mirror argus.db.models.JsonType: JSONB on Postgres, plain JSON elsewhere — so the
+# migration produces the same column type the ORM maps to (no json/jsonb drift on PG).
+_JSON = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 
 def upgrade() -> None:
@@ -39,9 +44,9 @@ def upgrade() -> None:
         sa.Column("country", sa.String(64), nullable=True),
         sa.Column("published", sa.DateTime(timezone=True), nullable=True),
         sa.Column("credibility", sa.Integer(), nullable=True),
-        sa.Column("embedding", sa.JSON(), nullable=True),
-        sa.Column("tags", sa.JSON(), nullable=True),
-        sa.Column("raw", sa.JSON(), nullable=True),
+        sa.Column("embedding", _JSON, nullable=True),
+        sa.Column("tags", _JSON, nullable=True),
+        sa.Column("raw", _JSON, nullable=True),
         sa.Column("enriched_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -118,8 +123,8 @@ def upgrade() -> None:
         sa.Column("brief_id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("query", sa.Text(), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
-        sa.Column("key_judgments", sa.JSON(), nullable=True),
-        sa.Column("citations", sa.JSON(), nullable=True),
+        sa.Column("key_judgments", _JSON, nullable=True),
+        sa.Column("citations", _JSON, nullable=True),
         sa.Column("confidence", sa.String(16), nullable=True),
         sa.Column("backend", sa.String(32), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

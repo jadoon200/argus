@@ -20,12 +20,15 @@ RELIABILITY_LABELS: dict[str, str] = {
     "F": "reliability cannot be judged",
 }
 
-# Admiralty information-credibility grades.
+# Admiralty information-credibility grades. The corroboration proxy
+# (`credibility_from_corroboration`) only ever emits 1-4 and 6, but the full scale is
+# defined so `credibility_label` is correct for any grade a document may carry.
 CREDIBILITY_LABELS: dict[int, str] = {
     1: "confirmed by other sources",
     2: "probably true",
     3: "possibly true",
     4: "uncorroborated (single source)",
+    5: "improbable",
     6: "cannot be judged",
 }
 

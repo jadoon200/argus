@@ -1,5 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("dspy")  # the `optimize` extra; skip cleanly where it isn't installed
+
 from argus.optimize.compile import build_trainset
 from argus.optimize.metric import brief_metric
 from argus.optimize.program import BriefProgram

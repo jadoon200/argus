@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from argus.api import app as app_module
 from argus.api.app import app, get_db
-from argus.api.limits import RateLimiter
+from argus.api.limits import ConcurrencyLimiter, RateLimiter
 from argus.db import models  # noqa: F401
 from argus.db.base import Base
 from argus.db.models import Document, Source
@@ -89,6 +89,17 @@ def test_brief_rate_limited(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(app_module, "_rate_limiter", RateLimiter(1, 60.0, False))
     assert client.post("/brief", json={"query": "first"}).status_code == 200
     assert client.post("/brief", json={"query": "second"}).status_code == 429
+
+
+def test_brief_returns_503_when_saturated(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Occupy the only inference slot so the request can't acquire one in time -> 503,
+    # not a crash or an unbounded queue (the concurrency guard from limits.py).
+    limiter = ConcurrencyLimiter(limit=1, acquire_timeout=0.05)
+    assert limiter._sem.acquire() is True
+    monkeypatch.setattr(app_module, "_concurrency", limiter)
+    assert client.post("/brief", json={"query": "while busy"}).status_code == 503
 
 
 def test_unknown_brief_404(client: TestClient) -> None:
