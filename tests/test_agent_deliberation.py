@@ -210,6 +210,8 @@ class StudentBackend:
         return (
             "KEY JUDGMENTS:\n- Escalation is likely [E1].\n"
             "CONFIDENCE: moderate — limited corroboration.\n"
+            "KEY ASSUMPTIONS: The deployment reporting is accurate.\n"
+            "INDICATORS: Additional naval movements near the reef.\n"
             "ALTERNATIVES: routine activity is plausible [E9].\n"
             "INTELLIGENCE GAPS: intentions unknown."
         )
@@ -225,6 +227,10 @@ def test_oneshot_brief_parses_and_resolves_citations() -> None:
     assert result.citations == ["reuters.com:1"]  # [E9] dropped (fabricated)
     assert result.alternatives and "routine" in result.alternatives
     assert result.gaps and "intentions" in result.gaps.lower()
+    # Key Assumptions Check + Indicators & Warnings must survive the free-form path too,
+    # not just the structured-JSON one (regression: these two SATs were dropped before).
+    assert result.key_assumptions == ["The deployment reporting is accurate."]
+    assert result.indicators == ["Additional naval movements near the reef."]
 
 
 def test_generate_brief_student_mode_one_shots(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -39,7 +39,14 @@ log = get_logger(__name__)
 _AUTO: object = object()  # sentinel: resolve the backend from settings
 _CITATION_RE = re.compile(r"\[([^\]]+)\]")
 _LABEL_NUM_RE = re.compile(r"\d+")
-_SECTION_HEADERS = ("KEY JUDGMENTS", "CONFIDENCE", "ALTERNATIVES", "INTELLIGENCE GAPS")
+_SECTION_HEADERS = (
+    "KEY JUDGMENTS",
+    "CONFIDENCE",
+    "KEY ASSUMPTIONS",  # Key Assumptions Check — dropped before this was parsed
+    "INDICATORS",  # Indicators & Warnings — dropped before this was parsed
+    "ALTERNATIVES",
+    "INTELLIGENCE GAPS",
+)
 _CONFIDENCE_RE = re.compile(r"\b(low|moderate|high)\b", re.IGNORECASE)
 
 
@@ -187,6 +194,8 @@ def _assemble(
         body=finding,
         key_judgments=[_strip_bullet(line) for line in sections["KEY JUDGMENTS"]],
         confidence=confidence_match.group(1).lower() if confidence_match else None,
+        key_assumptions=[_strip_bullet(line) for line in sections["KEY ASSUMPTIONS"]],
+        indicators=[_strip_bullet(line) for line in sections["INDICATORS"]],
         alternatives=" ".join(sections["ALTERNATIVES"]) or None,
         gaps=" ".join(sections["INTELLIGENCE GAPS"]) or None,
         citations=_resolve_citations(finding, label_map),
@@ -276,6 +285,8 @@ def oneshot_brief(query: str, evidence: list[EvidenceItem], backend: LLMBackend)
         body=text,
         key_judgments=[_strip_bullet(line) for line in sections["KEY JUDGMENTS"]],
         confidence=confidence_match.group(1).lower() if confidence_match else None,
+        key_assumptions=[_strip_bullet(line) for line in sections["KEY ASSUMPTIONS"]],
+        indicators=[_strip_bullet(line) for line in sections["INDICATORS"]],
         alternatives=" ".join(sections["ALTERNATIVES"]) or None,
         gaps=" ".join(sections["INTELLIGENCE GAPS"]) or None,
         citations=_resolve_citations(text, label_map),
