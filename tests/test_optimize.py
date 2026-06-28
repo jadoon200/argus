@@ -1,12 +1,15 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("dspy")  # the `optimize` extra; skip cleanly where it isn't installed
 
+from argus.agent.state import EvidenceItem
 from argus.optimize.compile import build_trainset
 from argus.optimize.metric import brief_metric
 from argus.optimize.program import BriefProgram
+from argus.optimize.serve import load_program, optimized_brief
 
 
 def test_metric_rewards_full_coverage() -> None:
@@ -41,3 +44,28 @@ def test_build_trainset_labels_evidence() -> None:
 def test_brief_program_constructs() -> None:
     program = BriefProgram()
     assert program.generate is not None
+
+
+class _FakeProgram:
+    """A compiled program stand-in: returns a canned prediction, so no LM/Ollama is hit."""
+
+    def __call__(self, question: str, evidence: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            key_judgments=["Escalation is likely [E1]", "Fabricated claim [E9]"],
+            confidence="moderate",
+        )
+
+
+def test_optimized_brief_maps_output_and_drops_fabricated_citations() -> None:
+    evidence = [EvidenceItem("reuters.com:1", "Naval patrols increase", "reuters.com", "B", 3)]
+    result = optimized_brief("q?", evidence, program=_FakeProgram())
+    assert result.backend == "dspy"
+    assert result.confidence == "moderate"
+    assert result.key_judgments[0].endswith("[E1]")
+    # [E1] resolves to the real doc id; the out-of-range [E9] is dropped (resolvability).
+    assert result.citations == ["reuters.com:1"]
+
+
+def test_load_program_without_artifact_returns_unoptimized(tmp_path: Path) -> None:
+    program = load_program(tmp_path / "missing.json")
+    assert program is not None and hasattr(program, "generate")

@@ -30,6 +30,15 @@ Hard rules:
   caution and say so explicitly.
 - Be concise and specific. No filler, no moralising, no restating the question."""
 
+# Single-shot brief prompt — shared by the self-distillation TRAINING target and the
+# `student`/one-shot SERVING path, so the fine-tuned student is asked at inference exactly
+# what it was trained on (the same system prompt, KEY JUDGMENTS…INTELLIGENCE GAPS sections).
+ONESHOT_SYSTEM = (
+    ARGUS_IDENTITY + "\n\nProduce the intelligence brief directly in these sections: KEY "
+    "JUDGMENTS (each ending with its [E#] citation), CONFIDENCE, KEY ASSUMPTIONS, INDICATORS, "
+    "ALTERNATIVES, INTELLIGENCE GAPS."
+)
+
 ESTIMATIVE_LANGUAGE = """Express likelihood using ONLY this estimative lexicon (ICD 203):
 "almost no chance" (~5%), "very unlikely" (~10-20%), "unlikely" (~20-45%),
 "roughly even chance" (~45-55%), "likely" (~55-80%), "very likely" (~80-95%),

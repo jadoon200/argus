@@ -112,6 +112,26 @@ _Auto-recorded by `make eval` — backend `template`._
   guard, not a hard retrieval test; and the model is mildly stochastic (the central-bank
   confidence varied low↔moderate across runs).
 
+**Distilled student (one-shot, MLX LoRA `Qwen2.5-3B-Instruct-4bit` + adapter)** — measured
+through the same harness in `student` mode, against the same base model with **no** adapter:
+
+| Model | cite coverage | confidence (trap query) | trap breaches | fabrications caught |
+|---|---|---|---|---|
+| base 3B (no adapter) | 0.00 | — (no calibrated call) | 0 | 0 |
+| **distilled student (LoRA)** | **1.00** | **low** (correct) | 0 | 2 |
+
+- **Distillation taught the tradecraft.** The base 3B doesn't produce the ARGUS sectioned,
+  cited brief at all (coverage 0.00, no confidence call). After LoRA self-distillation on the
+  teacher's eval-passing briefs, the student writes calibrated, fully-cited judgments
+  (coverage 1.00) and **held the calibration trap at `low`** — the format and the discipline
+  transferred to a model ~5× smaller.
+- **Faster but weaker, honestly.** A 3B one-shot vs the 14B panel: the student made **2
+  fabrication attempts** (cited labels that didn't resolve — dropped by the resolvability
+  invariant, never shown) where the teacher made 0. It also overfit the **4-example
+  smoke-test set** (train loss → 0.003, val loss rising), so this validates the *pipeline*,
+  not a production model. Scale the distillation set (`make ingest` across more topics +
+  `DISTILL_QUERIES`) for a stronger student.
+
 ## Recorded negatives (where it fails)
 
 The honest half. To be filled as found — e.g. thin-source topics where the agent overstates

@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+import pytest
+
 from argus.agent.analyst import extractive_brief, generate_brief
 from argus.agent.graph import run_deliberation
 from argus.agent.state import EvidenceItem
@@ -190,6 +192,58 @@ def test_generate_brief_assembles_and_validates_citations() -> None:
     # ACH ranking + the adjudicator's response to the strongest critique are surfaced.
     assert result.ach_ranking and result.ach_ranking[0].hypothesis == "The activity is escalation."
     assert result.critique_response and "moderate" in result.critique_response
+
+
+class StudentBackend:
+    """Stand-in for the MLX-distilled student: one call -> a sectioned brief (the format it
+    was trained on). [E9] is out of range and must be dropped on resolution."""
+
+    name = "mlx:student"
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+    ) -> str:
+        return (
+            "KEY JUDGMENTS:\n- Escalation is likely [E1].\n"
+            "CONFIDENCE: moderate — limited corroboration.\n"
+            "KEY ASSUMPTIONS: The deployment reporting is accurate.\n"
+            "INDICATORS: Additional naval movements near the reef.\n"
+            "ALTERNATIVES: routine activity is plausible [E9].\n"
+            "INTELLIGENCE GAPS: intentions unknown."
+        )
+
+
+def test_oneshot_brief_parses_and_resolves_citations() -> None:
+    from argus.agent.analyst import oneshot_brief
+
+    result = oneshot_brief("q?", _EVIDENCE, StudentBackend())
+    assert result.backend == "mlx:student"
+    assert result.confidence == "moderate"
+    assert result.key_judgments == ["Escalation is likely [E1]."]
+    assert result.citations == ["reuters.com:1"]  # [E9] dropped (fabricated)
+    assert result.alternatives and "routine" in result.alternatives
+    assert result.gaps and "intentions" in result.gaps.lower()
+    # Key Assumptions Check + Indicators & Warnings must survive the free-form path too,
+    # not just the structured-JSON one (regression: these two SATs were dropped before).
+    assert result.key_assumptions == ["The deployment reporting is accurate."]
+    assert result.indicators == ["Additional naval movements near the reef."]
+
+
+def test_generate_brief_student_mode_one_shots(monkeypatch: pytest.MonkeyPatch) -> None:
+    from argus.config import Settings
+
+    monkeypatch.setattr(
+        "argus.agent.analyst.get_settings",
+        lambda: Settings(_env_file=None, brief_mode="student"),
+    )
+    result = generate_brief("q?", evidence=_EVIDENCE, backend=StudentBackend(), persist=False)
+    assert result.backend == "mlx:student"  # one-shot, not the panel
+    assert result.confidence == "moderate"
+    assert result.citations == ["reuters.com:1"]
 
 
 def test_template_fallback_is_labelled_digest() -> None:

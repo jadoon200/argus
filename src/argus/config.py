@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     brief_max_per_source: int = 3
     num_hypotheses: int = 3  # competing hypotheses the ACH stage generates
     debate_rounds: int = 1  # red-team challenges, each followed by an analyst rebuttal
+    # Brief generation path: "panel" = the multi-agent ACH deliberation (default);
+    # "dspy" = the optimized single-shot DSPy program (the `optimize` extra; falls back to
+    # an unoptimized program if `make optimize` hasn't produced data/dspy/); "student" =
+    # one-shot the configured backend with the training prompt (the MLX-distilled student).
+    brief_mode: str = "panel"
 
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.
