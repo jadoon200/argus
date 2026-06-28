@@ -131,16 +131,21 @@ class MLXBackend:
     """Apple-Silicon-native local inference via mlx-lm (free). Also the path to serving
     a model fine-tuned locally with MLX LoRA. The model loads lazily and is cached."""
 
-    def __init__(self, model: str) -> None:
-        self.name = f"mlx:{model}"
+    def __init__(self, model: str, adapter_path: str | None = None) -> None:
+        suffix = "+lora" if adapter_path else ""
+        self.name = f"mlx:{model}{suffix}"
         self._model_name = model
+        self._adapter_path = adapter_path
         self._loaded: tuple[Any, Any] | None = None
 
     def _ensure_loaded(self) -> tuple[Any, Any]:
         if self._loaded is None:
             from mlx_lm import load
 
-            self._loaded = load(self._model_name)
+            if self._adapter_path:
+                self._loaded = load(self._model_name, adapter_path=self._adapter_path)
+            else:
+                self._loaded = load(self._model_name)
         return self._loaded
 
     def complete(
@@ -200,7 +205,7 @@ def resolve_backend(settings: Settings | None = None) -> LLMBackend | None:
         return AnthropicBackend(key, s.anthropic_model, s.llm_timeout_seconds)
 
     if choice == "mlx":
-        return MLXBackend(s.mlx_model)
+        return MLXBackend(s.mlx_model, s.mlx_adapter_path)
 
     if choice == "openai":
         return OpenAIBackend(

@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     # Apple-Silicon-native local inference via mlx-lm (free; the `mlx` extra). The path
     # to serving a locally fine-tuned model. Opt-in: ARGUS_LLM_BACKEND=mlx.
     mlx_model: str = "mlx-community/Qwen2.5-14B-Instruct-4bit"
+    # Optional LoRA adapter (from `make finetune`) loaded on top of mlx_model.
+    mlx_adapter_path: str | None = None
+    # Self-distillation fine-tuning: a small student learns ARGUS-style briefs from the
+    # teacher's eval-passing outputs (see argus/finetune/ and docs/FINETUNE.md).
+    finetune_base_model: str = "mlx-community/Qwen2.5-3B-Instruct-4bit"
+    finetune_data_dir: str = "data/finetune"
+    finetune_iters: int = 300
     # OpenAI-compatible server (vLLM / llama.cpp / LM Studio / groq / together). Free
     # when pointed at a local server; opt-in: ARGUS_LLM_BACKEND=openai.
     openai_base_url: str = "http://localhost:8000/v1"

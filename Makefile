@@ -60,6 +60,18 @@ eval:
 optimize:
 	python -m argus.optimize.compile
 
+# Self-distillation fine-tune (Apple Silicon). 1) build a dataset from the teacher's
+# eval-passing briefs, 2) LoRA fine-tune a small student, 3) serve it via the mlx backend.
+# Needs the mlx extra on a Mac: pip install -e .[mlx]. See docs/FINETUNE.md.
+FT_MODEL ?= mlx-community/Qwen2.5-3B-Instruct-4bit
+FT_ITERS ?= 300
+finetune-data:
+	python -m argus.finetune.dataset
+
+finetune:
+	python -m mlx_lm.lora --model $(FT_MODEL) --train --data data/finetune \
+		--adapter-path data/finetune/adapter --iters $(FT_ITERS) --batch-size 1
+
 # Serve the read-only API + the agent /brief route on :8000
 api:
 	uvicorn argus.api.app:app --reload
