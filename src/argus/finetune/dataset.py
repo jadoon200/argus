@@ -12,16 +12,42 @@ import random
 from pathlib import Path
 from typing import Any
 
-from argus.agent.analyst import generate_brief
+from sqlalchemy.orm import Session
+
+from argus.agent.analyst import gather_evidence, generate_brief
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.personas import ARGUS_IDENTITY
 from argus.agent.state import EvidenceItem, format_evidence
 from argus.config import get_settings
-from argus.eval.goldset import QUERIES, evidence_by_id
+from argus.db.base import session_scope
+from argus.eval.goldset import QUERIES, corpus_retrieved, evidence_by_id
 from argus.eval.metrics import citation_coverage
 from argus.logging import configure_logging, get_logger
+from argus.nlp.retrieval import hybrid_search
 
 log = get_logger(__name__)
+
+# Curated analyst queries to harvest the ingested corpus for a larger, more diverse
+# distillation set — the gold set alone is only a handful. Topics span the OSINT remit
+# (state competition, conflict, security, economic statecraft, hybrid threats).
+DISTILL_QUERIES: list[str] = [
+    "What is driving tensions in the South China Sea?",
+    "What is the current state of the conflict in Sudan?",
+    "How are Western sanctions affecting Russia's economy?",
+    "What is the security situation in the Sahel?",
+    "What are the latest developments in cross-strait relations with Taiwan?",
+    "What is happening with North Korea's missile program?",
+    "How is the conflict in Gaza affecting regional stability?",
+    "What are the drivers of instability in the Red Sea shipping lanes?",
+    "What is the status of Iran's nuclear program negotiations?",
+    "What cyber threats are being attributed to state actors?",
+    "How is China expanding its influence in the Pacific Islands?",
+    "What is the latest on Russia-Ukraine front-line developments?",
+    "What are the regional security implications of the coup in Myanmar?",
+    "How are critical-mineral supply chains becoming a geopolitical flashpoint?",
+    "What disinformation campaigns are being reported around upcoming elections?",
+    "What is driving migration flows across the Mediterranean?",
+]
 
 TRAIN_SYSTEM = (
     ARGUS_IDENTITY + "\n\nProduce the intelligence brief directly in these sections: KEY JUDGMENTS "
@@ -61,12 +87,50 @@ def generate_examples(
     return examples
 
 
-def gold_items() -> list[tuple[str, list[EvidenceItem]]]:
-    """Seed items from the gold set. Scale this up with your own (query, evidence) pairs
-    (e.g. gathered from the ingested corpus) for a production-size fine-tune."""
+def gold_items(k: int = 4) -> list[tuple[str, list[EvidenceItem]]]:
+    """Seed items: each gold query paired with its top-k *retrieved* evidence.
+
+    Uses the same hybrid retrieval the agent uses at inference, so the [E#] labels in the
+    training target match what the served student will actually see — not the whole corpus
+    handed in at once (which made the training distribution diverge from inference)."""
+    corpus = corpus_retrieved()
     by_id = evidence_by_id()
-    evidence = [by_id[doc_id] for doc_id in sorted(by_id)]
-    return [(gold.query, evidence) for gold in QUERIES]
+    items: list[tuple[str, list[EvidenceItem]]] = []
+    for gold in QUERIES:
+        ranked = hybrid_search(gold.query, corpus, None, top_k=k)
+        items.append((gold.query, [by_id[doc_id] for doc_id, _ in ranked]))
+    return items
+
+
+def corpus_items(
+    session: Session, queries: list[str] | None = None, k: int | None = None
+) -> list[tuple[str, list[EvidenceItem]]]:
+    """Harvest (query, retrieved-evidence) pairs from an ingested corpus — the way to
+    scale the distillation set well past the gold seed. Skips queries that retrieve
+    nothing (so an empty/thin corpus quietly contributes fewer, not broken, examples)."""
+    qs = queries if queries is not None else DISTILL_QUERIES
+    kk = k if k is not None else get_settings().brief_context_docs
+    items: list[tuple[str, list[EvidenceItem]]] = []
+    for query in qs:
+        evidence = gather_evidence(session, query, kk)
+        if evidence:
+            items.append((query, evidence))
+    return items
+
+
+def build_items() -> list[tuple[str, list[EvidenceItem]]]:
+    """The gold seed always, plus corpus-harvested items when an ingested corpus is
+    reachable — so the builder scales automatically once `make ingest`/`make enrich` have
+    populated the DB, and still runs (smaller) with no corpus at all."""
+    items = gold_items()
+    try:
+        with session_scope() as session:
+            harvested = corpus_items(session)
+    except Exception as exc:  # no DB / unreachable -> gold seed only
+        log.warning("corpus_unavailable_using_gold_only", error=str(exc))
+        harvested = []
+    log.info("distillation_items", gold=len(items), corpus=len(harvested))
+    return items + harvested
 
 
 def write_jsonl(
@@ -87,7 +151,7 @@ def write_jsonl(
 def main() -> None:
     configure_logging()
     settings = get_settings()
-    examples = generate_examples(gold_items(), resolve_backend())
+    examples = generate_examples(build_items(), resolve_backend())
     stats = write_jsonl(examples, Path(settings.finetune_data_dir))
     log.info("finetune_dataset_built", directory=settings.finetune_data_dir, **stats)
 
