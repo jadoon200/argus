@@ -11,8 +11,9 @@ evaluation bar.
 > on top. The two join: ARGUS can query Sentinel's cyber knowledge graph so one analyst
 > reasons across both — the way an all-source fusion cell actually works.
 
-> **Status:** agent spine + API complete; React dashboard, narrative watch, and cyber-fusion
-> bridge planned. What runs today and what's planned is tracked honestly in
+> **Status:** agent spine, API, narrative watch, and cyber-fusion bridge complete (plus DSPy
+> prompt optimization and MLX LoRA fine-tuning); the React dashboard is the remaining piece.
+> What runs today and what's planned is tracked honestly in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md); every model/agent claim lands in
 > [`docs/EVAL.md`](docs/EVAL.md) with the number that survives scrutiny, not a demo cherry-pick.
 
@@ -36,9 +37,13 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
    local Ollama model (Claude optional, never required), with a deterministic fallback so it
    always runs.
-4. *(Planned)* **Watches narratives** — clusters the reporting into narratives and flags
+4. **Watches narratives** — clusters the reporting into narratives and flags
    **coordination** (suspiciously synchronized pushing of the same message), the
-   information-defence half of the picture.
+   information-defence half of the picture — surfaced at `GET /narratives` (most-coordinated
+   first), as a human-review signal, never an automated verdict.
+5. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
+   (`ARGUS_SENTINEL_API_URL`), pulls cyber campaigns in as citable evidence so one brief reasons
+   across open-source *and* cyber reporting (read-only; off by default).
 
 ## Why it's built this way
 
@@ -78,8 +83,8 @@ an afterthought.
  │ Layer 2 · Analysis                           │      │
  │  2a entities + events + Admiralty            │      │
  │     source-reliability scoring + retrieval   │      │
- │  2b narrative clustering + coordination  ⬜  │      │
- │     ("narrative watch") — planned            │      │
+ │  2b narrative clustering + coordination  ✅  │      │
+ │     ("narrative watch") → /narratives        │      │
  └─────────────┬───────────────────────────────┘      │
                ▼                                       ▼
  ┌──────────────────────────────────────────────────────────┐
@@ -97,7 +102,9 @@ an afterthought.
 
 Python 3.12 · SQLAlchemy 2.0 + Alembic + Postgres · pydantic-settings · httpx + tenacity +
 Prefect (ingestion) · sentence-transformers + BM25 hybrid retrieval · LangGraph (multi-agent
-deliberation) · FastAPI (hardened for public deploy) · React 19 + TypeScript + Vite *(planned)*.
+deliberation) · pluggable LLM backends (Ollama / MLX / OpenAI-compatible / Anthropic, free by
+default) · DSPy (prompt optimization) · MLX LoRA (self-distillation fine-tune) · FastAPI
+(hardened for public deploy) · React 19 + TypeScript + Vite *(planned)*.
 Mirrors Sentinel's stack and conventions so the two read as one body of work.
 ruff + mypy (strict) + pytest gate every change.
 
