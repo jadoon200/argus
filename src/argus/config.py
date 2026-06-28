@@ -87,8 +87,12 @@ class Settings(BaseSettings):
     # Agents deliberate (multiple LLM calls); give them room rather than racing them.
     llm_timeout_seconds: float = 180.0
     brief_context_docs: int = 12  # documents of evidence handed to the agents per query
+    # Source diversity: cap how many evidence items any single source contributes to a
+    # brief, so one prolific outlet can't dominate the agents' evidence (on-theme with the
+    # reliability/coordination focus). 0 disables the cap.
+    brief_max_per_source: int = 3
     num_hypotheses: int = 3  # competing hypotheses the ACH stage generates
-    debate_rounds: int = 1  # analyst <-> red-team exchanges before adjudication
+    debate_rounds: int = 1  # red-team challenges, each followed by an analyst rebuttal
 
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.

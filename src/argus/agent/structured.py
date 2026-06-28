@@ -13,10 +13,16 @@ log = get_logger(__name__)
 
 
 def complete_model[ModelT: BaseModel](
-    backend: LLMBackend, system: str, user: str, schema: type[ModelT]
+    backend: LLMBackend,
+    system: str,
+    user: str,
+    schema: type[ModelT],
+    temperature: float | None = None,
 ) -> ModelT | None:
     try:
-        raw = backend.complete(system, user, response_schema=schema.model_json_schema())
+        raw = backend.complete(
+            system, user, response_schema=schema.model_json_schema(), temperature=temperature
+        )
         return schema.model_validate_json(raw)
     except (ValidationError, ValueError) as exc:
         log.warning("structured_output_fallback", schema=schema.__name__, error=str(exc))

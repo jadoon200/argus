@@ -19,7 +19,11 @@ class FakeBackend:
     name = "fake"
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         # Match the unique ROLE: markers (the Adjudicator prompt also mentions
         # "Red Team" and "Analyst", so plain substring checks would collide).
@@ -29,9 +33,48 @@ class FakeBackend:
                     {"hypotheses": ["The activity is escalation.", "The activity is routine."]}
                 )
             return "H1: The activity is escalation.\nH2: The activity is routine."
+        if "ROLE: ACH matrix scorer" in system:
+            if response_schema is not None:
+                # E1 (reuters, B) disconfirms routine; E2 (rt, D) disconfirms escalation.
+                # ACH must rank escalation first (its disconfirmer is the weaker source).
+                return json.dumps(
+                    {
+                        "rows": [
+                            {
+                                "hypothesis": "The activity is escalation.",
+                                "cells": [
+                                    {"evidence": "E1", "assessment": "consistent"},
+                                    {"evidence": "E2", "assessment": "inconsistent"},
+                                ],
+                            },
+                            {
+                                "hypothesis": "The activity is routine.",
+                                "cells": [
+                                    {"evidence": "E1", "assessment": "inconsistent"},
+                                    {"evidence": "E2", "assessment": "consistent"},
+                                ],
+                            },
+                        ]
+                    }
+                )
+            return "E1 consistent with escalation."
         if "ROLE: Lead Analyst" in system:
             return "I favour H1; the patrols [E1] indicate escalation."
         if "ROLE: Red Team" in system:
+            if response_schema is not None:
+                return json.dumps(
+                    {
+                        "critiques": [
+                            {
+                                "target_hypothesis": "H1",
+                                "challenged_claim": "Escalation leans on a single source",
+                                "severity": "high",
+                                "rationale": "Over-reliant on [E1]",
+                                "citations": ["E1"],
+                            }
+                        ]
+                    }
+                )
             return "Over-reliant on a single source [E1]; H2 is plausible [E2]."
         if "ROLE: Adjudicator" in system:
             if response_schema is not None:
@@ -48,6 +91,7 @@ class FakeBackend:
                         "alternative_hypothesis": "H2 routine activity is plausible",
                         "collection_requirement": "more independent sources",
                         "intelligence_gaps": ["intentions are unknown"],
+                        "critique_response": "Single-source caution noted; held at moderate.",
                     }
                 )
             return "KEY JUDGMENTS:\n- Escalation is likely [E1].\nCONFIDENCE: moderate."
@@ -60,15 +104,74 @@ def test_deliberation_visits_all_roles() -> None:
     assert state["analyst"]
     assert len(state["critiques"]) == 1
     assert state["finding"].startswith("KEY JUDGMENTS")
+    # ACH ranks escalation first (its only disconfirmer is the low-reliability D source).
+    assert state["ach_ranking"][0].hypothesis == "The activity is escalation."
     roles = [role for role, _ in state["transcript"]]
-    assert roles == ["hypotheses", "analyst", "red_team", "adjudicator"]
+    # The analyst now rebuts the red team's challenge before the adjudicator decides.
+    assert roles == ["hypotheses", "ach", "analyst", "red_team", "analyst", "adjudicator"]
 
 
 def test_debate_rounds_add_exchanges() -> None:
     state = run_deliberation("q?", _EVIDENCE, FakeBackend(), debate_rounds=2)
     assert len(state["critiques"]) == 2
     roles = [role for role, _ in state["transcript"]]
-    assert roles == ["hypotheses", "analyst", "red_team", "analyst", "red_team", "adjudicator"]
+    # Two red-team challenges, each followed by an analyst rebuttal; analyst speaks last.
+    assert roles == [
+        "hypotheses",
+        "ach",
+        "analyst",
+        "red_team",
+        "analyst",
+        "red_team",
+        "analyst",
+        "adjudicator",
+    ]
+
+
+def test_num_hypotheses_is_honored() -> None:
+    state = run_deliberation("q?", _EVIDENCE, FakeBackend(), debate_rounds=1, num_hypotheses=1)
+    assert len(state["hypotheses"]) == 1  # capped to the requested count
+
+
+class RecordingBackend:
+    """Captures the temperature each role is sampled at, to lock in the per-role policy."""
+
+    name = "rec"
+
+    def __init__(self) -> None:
+        self.seen: dict[str, float | None] = {}
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+    ) -> str:
+        for marker in (
+            "Hypothesis-setter",
+            "ACH matrix scorer",
+            "Lead Analyst",
+            "Red Team",
+            "Adjudicator",
+        ):
+            if f"ROLE: {marker}" in system:
+                self.seen[marker] = temperature
+        # Seed hypotheses so the ACH node actually runs; everything else falls back.
+        if "ROLE: Hypothesis-setter" in system and response_schema is None:
+            return "H1: a\nH2: b"
+        return ""
+
+
+def test_roles_sample_at_their_own_temperature() -> None:
+    backend = RecordingBackend()
+    run_deliberation("q?", _EVIDENCE, backend, debate_rounds=1)
+    seen = backend.seen
+    # Hot red team for divergent challenges; cold adjudicator for a reproducible finding.
+    assert seen["Red Team"] == 0.7
+    assert seen["Adjudicator"] == 0.0
+    assert seen["ACH matrix scorer"] == 0.1
+    assert seen["Red Team"] > seen["Lead Analyst"] > seen["Adjudicator"]
 
 
 def test_generate_brief_assembles_and_validates_citations() -> None:
@@ -84,6 +187,9 @@ def test_generate_brief_assembles_and_validates_citations() -> None:
     # Structured Analytic Techniques surfaced in the brief.
     assert result.key_assumptions == ["the deployment reporting is accurate"]
     assert result.indicators == ["additional naval movements near the reef"]
+    # ACH ranking + the adjudicator's response to the strongest critique are surfaced.
+    assert result.ach_ranking and result.ach_ranking[0].hypothesis == "The activity is escalation."
+    assert result.critique_response and "moderate" in result.critique_response
 
 
 def test_template_fallback_is_labelled_digest() -> None:
@@ -100,7 +206,11 @@ class NoJsonBackend:
     name = "nojson"
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         if "ROLE: Hypothesis-setter" in system:
             return "H1: One.\nH2: Two."

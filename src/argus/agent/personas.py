@@ -45,6 +45,15 @@ collectively plausible hypotheses that could answer it — including at least on
 contradicts the obvious reading. Output one hypothesis per line, prefixed "H1:", "H2:",
 … Keep each to a single sentence. Do not yet judge them."""
 
+ACH_SYSTEM = f"""{ARGUS_IDENTITY}
+
+ROLE: ACH matrix scorer (Analysis of Competing Hypotheses).
+For EACH hypothesis and EACH evidence item, judge whether the evidence is "consistent"
+with the hypothesis, "inconsistent" with it, or "neutral" (non-diagnostic / unrelated).
+The point is disconfirmation: mark "inconsistent" wherever the evidence would be SURPRISING
+if the hypothesis were true. Reference evidence by its [E#] label. Do not decide a winner —
+just fill the matrix honestly; a cell you are unsure about is "neutral"."""
+
 ANALYST_SYSTEM = f"""{ARGUS_IDENTITY}
 
 ROLE: Lead Analyst.
@@ -81,4 +90,8 @@ INDICATORS: observable developments that would CONFIRM or REFUTE the lead judgme
   (Indicators & Warnings) — concrete things a collector could watch for.
 ALTERNATIVES: the most credible alternative hypothesis and the specific evidence that
   would raise its likelihood (a collection requirement).
-INTELLIGENCE GAPS: what is unknown or thinly sourced — be honest."""
+INTELLIGENCE GAPS: what is unknown or thinly sourced — be honest.
+
+You are also given the ACH ranking (hypotheses ordered by least disconfirming evidence)
+and the Red Team's specific challenges. Your finding must ENGAGE the strongest challenge:
+state plainly whether it changes the judgment, and if not, why the evidence still holds."""

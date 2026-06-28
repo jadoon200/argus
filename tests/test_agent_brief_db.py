@@ -42,6 +42,39 @@ def test_gather_evidence_ranks_and_rates(session: Session) -> None:
     assert items[0].rating() == "B3"
 
 
+def test_gather_evidence_caps_per_source(session: Session) -> None:
+    """One prolific outlet must not dominate the evidence: the per-source cap holds and a
+    second source still makes the cut even when it ranks below the dominant one."""
+    session.add(Source(label="dominant.com", name="Dominant", reliability="C"))
+    session.add(Source(label="other.com", name="Other", reliability="B"))
+    for i in range(4):
+        session.add(
+            Document(
+                doc_id=f"dominant.com:{i}",
+                source="dominant.com",
+                title="reef standoff coast guard",
+                summary="standoff at the reef",
+                published=_T,
+            )
+        )
+    session.add(
+        Document(
+            doc_id="other.com:1",
+            source="other.com",
+            title="reef standoff coast guard vessels",
+            summary="standoff at the reef",
+            published=_T,
+        )
+    )
+    session.flush()
+
+    items = gather_evidence(session, "reef standoff", k=3, max_per_source=2)
+    sources = [it.source for it in items]
+    assert len(items) == 3
+    assert sources.count("dominant.com") <= 2  # capped
+    assert "other.com" in sources  # diversity reaches past the dominant source
+
+
 def test_generate_brief_template_path_persists(session: Session) -> None:
     _seed(session)
     # backend=None forces the deterministic digest (no LLM, no network).

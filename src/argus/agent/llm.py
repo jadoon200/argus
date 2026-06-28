@@ -21,15 +21,24 @@ from argus.logging import get_logger
 log = get_logger(__name__)
 
 
+_DEFAULT_TEMPERATURE = 0.2
+
+
 @runtime_checkable
 class LLMBackend(Protocol):
     name: str
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Complete a prompt. When `response_schema` (a JSON schema) is given, ask the
-        model for JSON matching it — the structured-output path."""
+        model for JSON matching it — the structured-output path. `temperature` lets the
+        deliberation sample each role differently (divergent red team, deterministic
+        adjudicator); ``None`` uses the backend default."""
         ...
 
 
@@ -44,8 +53,13 @@ class OllamaBackend:
         self._timeout = timeout
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
+        temp = _DEFAULT_TEMPERATURE if temperature is None else temperature
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
@@ -53,7 +67,7 @@ class OllamaBackend:
                 {"role": "user", "content": user},
             ],
             "stream": False,
-            "options": {"temperature": 0.2},
+            "options": {"temperature": temp},
         }
         if response_schema is not None:
             payload["format"] = response_schema  # Ollama structured outputs (JSON schema)
@@ -73,7 +87,11 @@ class AnthropicBackend:
         self._timeout = timeout
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         import anthropic  # optional dependency, imported lazily
 
@@ -84,6 +102,7 @@ class AnthropicBackend:
         message = client.messages.create(
             model=self._model,
             max_tokens=2048,
+            temperature=_DEFAULT_TEMPERATURE if temperature is None else temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -104,7 +123,11 @@ class OpenAIBackend:
         self._timeout = timeout
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         if response_schema is not None:
             schema_json = json.dumps(response_schema)
@@ -115,7 +138,7 @@ class OpenAIBackend:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": 0.2,
+            "temperature": _DEFAULT_TEMPERATURE if temperature is None else temperature,
         }
         if response_schema is not None:
             payload["response_format"] = {"type": "json_object"}
@@ -149,7 +172,11 @@ class MLXBackend:
         return self._loaded
 
     def complete(
-        self, system: str, user: str, response_schema: dict[str, Any] | None = None
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,  # mlx-lm sampling left at its default
     ) -> str:
         from mlx_lm import generate
 

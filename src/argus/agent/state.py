@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-from argus.agent.schemas import Finding
+from argus.agent.schemas import AchMatrix, Critique, Finding
 from argus.nlp.reliability import admiralty_code, credibility_label, reliability_label
 
 
@@ -44,6 +44,17 @@ def format_evidence(items: list[EvidenceItem]) -> str:
     return "\n".join(item.as_line(f"E{i + 1}") for i, item in enumerate(items))
 
 
+@dataclass(frozen=True)
+class HypothesisScore:
+    """One hypothesis's ACH score — defined here (a shared deliberation type) rather than
+    in ach.py so this module has no import cycle and LangGraph can resolve the state hints."""
+
+    hypothesis: str
+    inconsistency: float  # reliability-weighted disconfirming evidence (lower = stronger)
+    consistent: int  # count of consistent cells (weak tiebreak; non-diagnostic alone)
+    inconsistent: int  # count of inconsistent cells
+
+
 @dataclass
 class BriefResult:
     query: str
@@ -56,6 +67,8 @@ class BriefResult:
     gaps: str | None = None
     citations: list[str] = field(default_factory=list)
     hypotheses: list[str] = field(default_factory=list)
+    ach_ranking: list["HypothesisScore"] = field(default_factory=list)  # ACH, strongest first
+    critique_response: str | None = None  # how the finding answers the strongest challenge
     backend: str = "template"
 
 
@@ -64,9 +77,13 @@ class DeliberationState(TypedDict, total=False):
 
     query: str
     evidence: list[EvidenceItem]
+    num_hypotheses: int  # how many competing hypotheses to enumerate (ACH)
     hypotheses: list[str]
+    ach_matrix: AchMatrix | None  # evidence x hypothesis consistency matrix
+    ach_ranking: list["HypothesisScore"]  # hypotheses ranked by least disconfirming evidence
     analyst: str  # latest analyst assessment
-    critiques: list[str]  # accumulated red-team challenges
+    critiques: list[str]  # accumulated red-team challenges (rendered text, for prompts)
+    critiques_struct: list[Critique]  # accumulated structured red-team critiques
     transcript: list[tuple[str, str]]  # (role, text) record of the deliberation
     round: int
     finding: str  # adjudicator output rendered to text (for the brief body)

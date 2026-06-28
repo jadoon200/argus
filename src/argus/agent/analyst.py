@@ -40,11 +40,41 @@ def _doc_text(doc: Document) -> str:
     return f"{doc.title}. {doc.summary}" if doc.summary else doc.title
 
 
-def gather_evidence(session: Session, query: str, k: int) -> list[EvidenceItem]:
-    """Retrieve the top-k most relevant documents as rated evidence items."""
+def _select_diverse(
+    ranked: list[tuple[str, float]], source_of: dict[str, str], max_per_source: int, k: int
+) -> list[str]:
+    """Pick up to `k` doc ids in rank order, capping each source at `max_per_source` so one
+    prolific outlet can't dominate; backfill from the capped-out remainder if needed."""
+    if max_per_source <= 0:
+        return [doc_id for doc_id, _ in ranked[:k]]
+    chosen: list[str] = []
+    deferred: list[str] = []
+    per_source: dict[str, int] = {}
+    for doc_id, _ in ranked:
+        src = source_of[doc_id]
+        if per_source.get(src, 0) < max_per_source:
+            chosen.append(doc_id)
+            per_source[src] = per_source.get(src, 0) + 1
+        else:
+            deferred.append(doc_id)
+        if len(chosen) >= k:
+            return chosen
+    for doc_id in deferred:  # too few distinct sources — fill the rest, best-ranked first
+        if len(chosen) >= k:
+            break
+        chosen.append(doc_id)
+    return chosen
+
+
+def gather_evidence(
+    session: Session, query: str, k: int, max_per_source: int | None = None
+) -> list[EvidenceItem]:
+    """Retrieve the top-k most relevant documents as rated evidence items, with a
+    per-source diversity cap so no single outlet dominates the agents' evidence."""
     docs = list(session.scalars(select(Document)).all())
     if not docs:
         return []
+    cap = max_per_source if max_per_source is not None else get_settings().brief_max_per_source
     has_embeddings = any(d.embedding for d in docs)
     rdocs = [RetrievedDoc(d.doc_id, _doc_text(d), d.embedding) for d in docs]
     query_vec = None
@@ -54,11 +84,12 @@ def gather_evidence(session: Session, query: str, k: int) -> list[EvidenceItem]:
         except ImportError:
             # Slim deployments ship without sentence-transformers — degrade to BM25.
             log.warning("embeddings_unavailable_lexical_only")
-    ranked = hybrid_search(query, rdocs, query_vec, top_k=k)
-
     by_id = {d.doc_id: d for d in docs}
+    ranked = hybrid_search(query, rdocs, query_vec, top_k=len(rdocs))
+    selected = _select_diverse(ranked, {d.doc_id: d.source for d in docs}, cap, k)
+
     items: list[EvidenceItem] = []
-    for doc_id, _ in ranked:
+    for doc_id in selected:
         doc = by_id[doc_id]
         src = session.get(Source, doc.source)
         items.append(
@@ -153,6 +184,7 @@ def _assemble(
         gaps=" ".join(sections["INTELLIGENCE GAPS"]) or None,
         citations=_resolve_citations(finding, label_map),
         hypotheses=state.get("hypotheses", []),
+        ach_ranking=state.get("ach_ranking", []),
         backend=backend,
     )
 
@@ -194,6 +226,8 @@ def _assemble_from_struct(
         gaps="; ".join(struct.intelligence_gaps) or None,
         citations=citations,
         hypotheses=state.get("hypotheses", []),
+        ach_ranking=state.get("ach_ranking", []),
+        critique_response=struct.critique_response or None,
         backend=backend,
     )
 
@@ -277,6 +311,14 @@ def render(result: BriefResult) -> str:
     ]
     lines += [f"  • {kj}" for kj in (result.key_judgments or ["(none)"])]
     lines += ["", f"CONFIDENCE: {result.confidence or 'n/a'}"]
+    if result.ach_ranking:
+        lines += ["", "COMPETING HYPOTHESES (ACH — least-disconfirmed first)"]
+        lines += [
+            f"  {i + 1}. {s.hypothesis}  (disconfirm={s.inconsistency:.2f})"
+            for i, s in enumerate(result.ach_ranking)
+        ]
+    if result.critique_response:
+        lines += ["", f"RED TEAM RESPONSE: {result.critique_response}"]
     if result.key_assumptions:
         lines += ["", "KEY ASSUMPTIONS"]
         lines += [f"  • {a}" for a in result.key_assumptions]
