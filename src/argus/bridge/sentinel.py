@@ -20,6 +20,20 @@ from argus.nlp.reliability import credibility_from_corroboration
 log = get_logger(__name__)
 
 
+def _technique_ids(techniques: Any) -> list[str]:
+    """Pull ATT&CK ids out of SENTINEL's `techniques` — a list of `{technique_id, name,
+    score, corroborations}` objects — while tolerating a bare-string form too."""
+    out: list[str] = []
+    for t in techniques or []:
+        if isinstance(t, dict):
+            tid = t.get("technique_id") or t.get("id")
+            if tid:
+                out.append(str(tid))
+        elif t:
+            out.append(str(t))
+    return out
+
+
 class SentinelBridge:
     def __init__(self, base_url: str, timeout: float = 10.0) -> None:
         self._url = base_url.rstrip("/")
@@ -47,25 +61,46 @@ class SentinelBridge:
         return [r for r in rows if isinstance(r, dict)]
 
     def campaigns_as_evidence(self, limit: int = 5) -> list[EvidenceItem]:
-        """Map SENTINEL campaigns to rated evidence items the analyst can cite."""
+        """Map SENTINEL campaigns to rated evidence items the analyst can cite.
+
+        SENTINEL's `/campaigns` returns ALL campaigns, already sorted most-salient first
+        (actively-exploited → freshest → best-corroborated), with `techniques` as objects
+        and `kev_cves`/`age_days` alongside — so we cap client-side, pull the technique ids
+        out of the objects, and fold KEV (confirmed exploitation in the wild) and recency
+        into both the summary and the credibility.
+        """
         items: list[EvidenceItem] = []
-        for c in self.campaigns(limit):
+        for c in self.campaigns(limit)[:limit]:  # server ignores `limit`; cap here
             cid = str(c.get("campaign_id") or c.get("id") or "?")
             cves = [str(x) for x in (c.get("cve_ids") or [])]
-            techniques = [str(x) for x in (c.get("techniques") or c.get("technique_ids") or [])]
+            kev = [str(x) for x in (c.get("kev_cves") or [])]
+            techniques = _technique_ids(c.get("techniques") or c.get("technique_ids"))
             report_count = int(c.get("report_count") or len(c.get("reports") or []) or 0)
+            age_days = c.get("age_days")
+
+            kev_note = (
+                f" KEV: confirmed exploitation in the wild ({', '.join(kev[:3])})." if kev else ""
+            )
+            age_note = (
+                f" Most recent report ~{float(age_days):.0f}d ago." if age_days is not None else ""
+            )
             summary = (
                 f"SENTINEL cyber campaign linking {report_count} CTI reports. "
                 f"CVEs: {', '.join(cves[:5]) or 'n/a'}. "
-                f"ATT&CK: {', '.join(techniques[:6]) or 'n/a'}."
+                f"ATT&CK: {', '.join(techniques[:6]) or 'n/a'}.{kev_note}{age_note}"
             )
+            # KEV is real-world corroboration of exploitation — never let it score below the
+            # 2-source-corroboration grade.
+            credibility = credibility_from_corroboration(report_count)
+            if kev:
+                credibility = min(credibility, 2)
             items.append(
                 EvidenceItem(
                     doc_id=f"sentinel-cyber:{cid}",
-                    title=f"Cyber threat campaign {cid}",
+                    title=f"Cyber threat campaign {cid}" + (" [KEV]" if kev else ""),
                     source="sentinel-cyber",
                     reliability="B",  # structured CTI from the sibling platform
-                    credibility=credibility_from_corroboration(report_count),
+                    credibility=credibility,
                     summary=summary,
                 )
             )
