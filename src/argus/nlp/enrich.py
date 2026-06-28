@@ -48,9 +48,11 @@ def _extract_pending(session: Session, pending: list[Document]) -> int:
         counts = Counter(extract_entities(_doc_text(doc)))
         for (name, etype), count in counts.items():
             eid = entity_id(name, etype)
-            entity = session.merge(
-                Entity(entity_id=eid, name=name, type=etype, first_seen=doc.published)
-            )
+            # NB: don't pass first_seen/last_seen into the merged Entity — merge copies
+            # the constructor's values onto the existing row, which would clobber the
+            # running min/max with the *current* doc's date (or None). The span is owned
+            # solely by the comparisons below.
+            entity = session.merge(Entity(entity_id=eid, name=name, type=etype))
             entity.mentions = (entity.mentions or 0) + count
             if doc.published is not None:
                 if entity.first_seen is None or doc.published < entity.first_seen:

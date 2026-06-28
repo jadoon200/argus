@@ -57,3 +57,32 @@ def test_run_is_idempotent(session: Session, monkeypatch: pytest.MonkeyPatch) ->
     enrich_mod.run(session)
     stats2 = enrich_mod.run(session)
     assert stats2["embedded"] == 0  # already-enriched docs are skipped
+
+
+def test_entity_span_spans_all_mentions(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An entity's first_seen/last_seen must bracket every mention, regardless of the
+    order documents are processed in (regression: merge used to clobber first_seen)."""
+    monkeypatch.setattr(enrich_mod, "embed_texts", _fake_embed)
+    early = datetime(2026, 6, 1, tzinfo=UTC)
+    late = datetime(2026, 6, 20, tzinfo=UTC)
+    session.add(Source(label="reuters.com", reliability="B"))
+    # Same entity ("Alpha Command") in an early doc and a later doc; the later doc is
+    # processed second, which is exactly when the old code overwrote first_seen.
+    session.add(
+        Document(doc_id="early", source="reuters.com", title="Alpha Command meets", published=early)
+    )
+    session.add(
+        Document(
+            doc_id="late", source="reuters.com", title="Alpha Command meets again", published=late
+        )
+    )
+    session.flush()
+
+    enrich_mod.run(session)
+
+    alpha = next(e for e in session.query(Entity).all() if e.name == "Alpha Command")
+    assert alpha.mentions == 2
+    # .date() keeps the assert robust to SQLite returning naive datetimes.
+    assert alpha.first_seen is not None and alpha.last_seen is not None
+    assert alpha.first_seen.date() == early.date()  # earliest mention, not last-processed
+    assert alpha.last_seen.date() == late.date()
