@@ -1,5 +1,7 @@
 # ARGUS
 
+[![CI](https://github.com/jadoon200/argus/actions/workflows/ci.yml/badge.svg)](https://github.com/jadoon200/argus/actions/workflows/ci.yml)
+
 **All-source intelligence analyst workbench** — fuses the open-source *information*
 environment (global news + events + advisories) into source-rated, **cited intelligence
 briefs**, written by a **multi-agent ACH deliberation panel** and held to a measured
