@@ -15,7 +15,7 @@ anchor: a demonstrable MVP well before **~10 Aug 2026**.
 | 5a | FastAPI (`/brief` + read-only graph, hardened: rate-limit/concurrency/size-cap guards; `GET /model` observability) | ✅ done |
 | 5b | React / TypeScript dashboard — query box, brief with inline citations + reliability badges, narrative-watch panel | ⬜ |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch") + `/narratives` API | ✅ done |
-| 7 | Cyber-fusion bridge — `query_cyber_graph` tool over Sentinel's read-only API | ⬜ |
+| 7 | Cyber-fusion bridge — SENTINEL cyber campaigns as citable evidence (read-only, `ARGUS_SENTINEL_API_URL`) | ✅ done |
 | 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
 | 9 | **Live deployment** — deferred; will follow once 5b + one of {6, 7} land | ⬜ deferred |
 

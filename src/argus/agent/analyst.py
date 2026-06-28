@@ -19,6 +19,7 @@ from argus.agent.graph import run_deliberation
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.schemas import Finding
 from argus.agent.state import BriefResult, DeliberationState, EvidenceItem, evidence_labels
+from argus.bridge.sentinel import cyber_evidence
 from argus.config import get_settings
 from argus.db.base import session_scope
 from argus.db.models import Brief, Document, Source
@@ -234,6 +235,9 @@ def generate_brief(
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
         evidence = gather_evidence(session, query, get_settings().brief_context_docs)
+        # All-source fusion: append cyber campaigns from SENTINEL when the bridge is on
+        # (no-op by default). Cyber items become citable evidence alongside the news.
+        evidence = evidence + cyber_evidence()
 
     resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
     if resolved is None:
