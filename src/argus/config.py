@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.
     sentinel_api_url: str = ""
+    # Query-relevant cyber fusion: map the brief's query through SENTINEL's /map-techniques
+    # and keep only campaigns whose ATT&CK techniques overlap the techniques mapped above
+    # this score. Calibrated so a cyber query (~0.35) pulls relevant campaigns while a
+    # geopolitical one (~0.08) pulls none. 0 keeps the old query-agnostic top-salient behaviour.
+    sentinel_relevance_min_score: float = 0.25
 
     # --- API hardening for public deployment (safe local-dev defaults) ----------------
     api_allowed_origins: str = ""
