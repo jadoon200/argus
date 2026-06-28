@@ -98,6 +98,16 @@ class EventOut(BaseModel):
     source_count: int
 
 
+class NarrativeOut(BaseModel):
+    narrative_id: str
+    label: str
+    doc_count: int
+    source_count: int
+    coordination: float | None  # human-review signal in [0,1], not a verdict
+    first_seen: str | None
+    last_seen: str | None
+
+
 class BriefOut(BaseModel):
     brief_id: int
     query: str
@@ -184,6 +194,25 @@ def events(limit: int = 50, db: Session = Depends(get_db)) -> list[EventOut]:
             source_count=e.source_count,
         )
         for e in rows
+    ]
+
+
+@app.get("/narratives", response_model=list[NarrativeOut])
+def narratives(limit: int = 50, db: Session = Depends(get_db)) -> list[NarrativeOut]:
+    """Narrative clusters, most-coordinated first (a human-review signal, not a verdict)."""
+    limit = max(1, min(limit, 200))
+    rows = db.scalars(select(Narrative).order_by(Narrative.coordination.desc()).limit(limit)).all()
+    return [
+        NarrativeOut(
+            narrative_id=n.narrative_id,
+            label=n.label,
+            doc_count=n.doc_count,
+            source_count=n.source_count,
+            coordination=n.coordination,
+            first_seen=n.first_seen.isoformat() if n.first_seen else None,
+            last_seen=n.last_seen.isoformat() if n.last_seen else None,
+        )
+        for n in rows
     ]
 
 

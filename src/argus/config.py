@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     # --- Narrative watch (Layer 2b) ---------------------------------------------------
     narrative_min_cluster_size: int = 3
+    # Looser than event dedup: a narrative is a shared *framing/claim*, not the same event.
+    narrative_threshold: float = 0.6
     # Coordination: window (hours) within which synchronized publishing looks coordinated.
     coordination_window_hours: float = 6.0
 
