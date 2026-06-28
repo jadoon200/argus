@@ -51,6 +51,11 @@ narratives:
 brief:
 	python -m argus.agent.analyst "$(Q)"
 
+# The optimized single-shot brief via the DSPy-compiled program (run `make optimize`
+# first; needs the `optimize` extra). Same as `ARGUS_BRIEF_MODE=dspy make brief`.
+brief-dspy:
+	python -m argus.optimize.serve "$(Q)"
+
 # Score the analyst agent/RAG on the gold query set (results -> docs/EVAL.md).
 eval:
 	python -m argus.eval.run

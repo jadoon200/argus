@@ -273,12 +273,19 @@ def generate_brief(
         # (no-op by default). Cyber items become citable evidence alongside the news.
         evidence = evidence + cyber_evidence()
 
-    resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
-    if resolved is None:
-        result = extractive_brief(query, evidence)
+    if backend is _AUTO and get_settings().brief_mode == "dspy":
+        # Optimized single-shot path. Lazy import: the `optimize` extra (DSPy) must not be
+        # a hard dependency of the core serving flow.
+        from argus.optimize.serve import optimized_brief
+
+        result = optimized_brief(query, evidence)
     else:
-        state = run_deliberation(query, evidence, resolved)
-        result = _assemble(query, evidence, state, resolved.name)
+        resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
+        if resolved is None:
+            result = extractive_brief(query, evidence)
+        else:
+            state = run_deliberation(query, evidence, resolved)
+            result = _assemble(query, evidence, state, resolved.name)
 
     if persist and session is not None:
         session.add(
