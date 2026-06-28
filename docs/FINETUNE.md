@@ -36,11 +36,14 @@ make brief Q="What is driving tensions in the South China Sea?"
 
 ## Scaling up
 
-`argus/finetune/dataset.py:gold_items()` seeds from the eval gold set (a handful of examples —
-enough to validate the pipeline, not to train a strong model). For a real fine-tune, expand the
-`(query, evidence)` pairs — e.g. gather evidence from your ingested corpus across many topics —
-so the teacher produces hundreds of examples. More diverse, eval-passing examples → a better
-student.
+`dataset.py:build_items()` already scales automatically: it always includes the gold seed
+(`gold_items()`, each query paired with its **retrieved** evidence so training matches
+inference) **plus** corpus-harvested items (`corpus_items()`) — it runs the curated
+`DISTILL_QUERIES` against whatever you've ingested and pairs each with real retrieved
+evidence. So the recipe for a stronger student is simply: ingest more (`make ingest` across
+many topics) and enrich (`make enrich`), then `make finetune-data` — the teacher turns each
+harvested (query, evidence) into an eval-passing brief. Widen `DISTILL_QUERIES` for more
+topical coverage. More diverse, eval-passing examples → a better student.
 
 ## Honest expectations
 

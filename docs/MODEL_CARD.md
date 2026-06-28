@@ -51,12 +51,29 @@ itself evaluated (`docs/EVAL.md` §4).
 
 ## LLM backends
 
-Pluggable, free by default. `auto` mode selects local Ollama if reachable (recommended:
-`qwen2.5:14b` on an M3 Pro; `llama2` is too weak) and otherwise falls back to the
-deterministic extractive briefer — which always runs with no key and honestly reports only
-`low` confidence. Claude (Anthropic API) is **opt-in only**, never auto-selected; set
-`ARGUS_LLM_BACKEND=anthropic` to use it. All backends are scored on the same gold set so the
-key-free floor is explicit.
+Pluggable, free by default (`ARGUS_LLM_BACKEND`). `auto` mode selects local Ollama if
+reachable (recommended: `qwen2.5:14b` on an M3 Pro; `llama2` is too weak) and otherwise
+falls back to the deterministic extractive briefer — which always runs with no key and
+honestly reports only `low` confidence. Other options: `mlx` (Apple-Silicon-native local
+inference via mlx-lm, and the way the fine-tuned student is served), `openai` (any
+OpenAI-compatible server — vLLM/llama.cpp/LM Studio/groq — free when local), and
+`anthropic` (Claude, **opt-in only**, never auto-selected). All backends are scored on the
+same gold set so the key-free floor is explicit.
+
+## Brief-generation modes & the distilled student
+
+Three ways to produce a brief, each measured on the same harness:
+
+- **Multi-agent panel** (`ARGUS_BRIEF_MODE=panel`, default) — the full ACH deliberation;
+  highest quality, several LLM calls.
+- **Optimized single-shot** (`ARGUS_BRIEF_MODE=dspy`) — a DSPy-compiled prompt
+  (`make optimize`) that one-shots the brief; faster, no debate.
+- **Distilled student** (`ARGUS_LLM_BACKEND=mlx` + a LoRA adapter) — a small local model
+  (e.g. Qwen2.5-3B) **self-distilled** from the teacher's eval-passing briefs (only briefs
+  that are cited, non-empty, and calibrated become training targets). It one-shots a brief
+  and is **faster but weaker** than the 14B teacher — a real, measured trade-off (see
+  `docs/EVAL.md` / `docs/FINETUNE.md`), not free quality. The full panel stays the path for
+  the highest-stakes assessments.
 
 ## Evaluation
 
