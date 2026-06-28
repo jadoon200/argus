@@ -165,10 +165,10 @@ class MLXBackend:
         if self._loaded is None:
             from mlx_lm import load
 
-            if self._adapter_path:
-                self._loaded = load(self._model_name, adapter_path=self._adapter_path)
-            else:
-                self._loaded = load(self._model_name)
+            # load() returns (model, tokenizer) — or a 3-tuple with return_config; take the
+            # first two so the type is a clean (model, tokenizer) regardless of version.
+            result = load(self._model_name, adapter_path=self._adapter_path)
+            self._loaded = (result[0], result[1])
         return self._loaded
 
     def complete(

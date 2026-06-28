@@ -76,7 +76,7 @@ def test_mlx_backend_generates(monkeypatch: pytest.MonkeyPatch) -> None:
         ) -> str:
             return "PROMPT: " + messages[-1]["content"]
 
-    fake.load = lambda name: ("MODEL", _Tok())  # type: ignore[attr-defined]
+    fake.load = lambda name, adapter_path=None: ("MODEL", _Tok())  # type: ignore[attr-defined]
     fake.generate = lambda model, tokenizer, prompt, max_tokens: "mlx response"  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "mlx_lm", fake)
 
