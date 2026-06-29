@@ -95,5 +95,4 @@ and cross-backend parity — with recorded negatives. Headline numbers: **TBD**.
 
 ## Responsible use
 
-Defensive/analytical, public data only. See README → *Responsible use* and CLAUDE.md →
-*Conventions*.
+Defensive/analytical, public data only. See README → *Responsible use*.
