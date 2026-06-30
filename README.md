@@ -13,8 +13,8 @@ evaluation bar.
 > on top. The two join: ARGUS can query Sentinel's cyber knowledge graph so one analyst
 > reasons across both — the way an all-source fusion cell actually works.
 
-> **Status:** agent spine, API, narrative watch, and cyber-fusion bridge complete (plus DSPy
-> prompt optimization and MLX LoRA fine-tuning); the React dashboard is the remaining piece.
+> **Status:** agent spine, API, narrative watch, cyber-fusion bridge, and the React dashboard
+> all complete (plus DSPy prompt optimization and MLX LoRA fine-tuning).
 > What runs today and what's planned is tracked honestly in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md); every model/agent claim lands in
 > [`docs/EVAL.md`](docs/EVAL.md) with the number that survives scrutiny, not a demo cherry-pick.
@@ -97,7 +97,7 @@ an afterthought.
                ▼
         FastAPI (hardened, read-only + 1 agent route)
                ▼
-        React / TypeScript dashboard  ⬜ planned
+        React / TypeScript dashboard  ✅ workbench · narrative watch · collection
 ```
 
 ## Stack
@@ -106,7 +106,7 @@ Python 3.12 · SQLAlchemy 2.0 + Alembic + Postgres · pydantic-settings · httpx
 Prefect (ingestion) · sentence-transformers + BM25 hybrid retrieval · LangGraph (multi-agent
 deliberation) · pluggable LLM backends (Ollama / MLX / OpenAI-compatible / Anthropic, free by
 default) · DSPy (prompt optimization) · MLX LoRA (self-distillation fine-tune) · FastAPI
-(hardened for public deploy) · React 19 + TypeScript + Vite *(planned)*.
+(hardened for public deploy) · React 19 + TypeScript + Vite + TanStack Query (dashboard).
 Mirrors Sentinel's stack and conventions so the two read as one body of work.
 ruff + mypy (strict) + pytest gate every change.
 

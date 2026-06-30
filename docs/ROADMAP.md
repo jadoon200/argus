@@ -1,8 +1,8 @@
 # Roadmap
 
 Built honestly: a milestone is only ✅ when it runs and is tested. The agent spine (0–4), the
-FastAPI layer (5a), narrative watch (6), and the cyber-fusion bridge (7) are all complete; the
-React dashboard (5b) is the remaining build, with live deployment deferred to after it lands.
+FastAPI layer (5a), the React dashboard (5b), narrative watch (6), and the cyber-fusion bridge
+(7) are all complete; what remains is polish (8) and the deferred live deployment (9).
 Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 
 | # | Milestone | Status |
@@ -13,20 +13,20 @@ Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 | 3 | Analyst agent — **multi-agent ACH deliberation** (LangGraph): hypotheses → analyst ↔ red-team → adjudicator; free-by-default LLM (Ollama / deterministic), citation-resolvable **cited brief** | ✅ done |
 | 4 | Eval harness — gold query set; retrieval recall/MRR, citation coverage, fabrication-caught, calibration-trap (deterministic) | ✅ done |
 | 5a | FastAPI (`/brief` + read-only graph, hardened: rate-limit/concurrency/size-cap guards; `GET /model` observability) | ✅ done |
-| 5b | React / TypeScript dashboard — query box, brief with inline citations + reliability badges, narrative-watch panel | ⬜ |
+| 5b | React / TypeScript dashboard — workbench (query → rated evidence + cited brief with Admiralty badges), narrative-watch panel, collection (corpus/source-reliability/backend) | ✅ done |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch") + `/narratives` API | ✅ done |
 | 7 | Cyber-fusion bridge — SENTINEL cyber campaigns as citable evidence (read-only, `ARGUS_SENTINEL_API_URL`) | ✅ done |
 | 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
-| 9 | **Live deployment** — deferred; will follow once 5b (the dashboard) lands | ⬜ deferred |
+| 9 | **Live deployment** — deferred; the dashboard (5b) has landed, so this is the next major step when chosen | ⬜ deferred |
 
 Beyond the numbered spine, the "tune to our purpose" track is also done: domain-specialized
 agent personas (Key Assumptions Check + Indicators & Warnings), **DSPy** prompt optimization
 (`make optimize`, `src/argus/optimize/`), free **MLX** + OpenAI-compatible LLM backends, and
 **MLX LoRA self-distillation** (`make finetune`, `src/argus/finetune/`, see `docs/FINETUNE.md`).
 
-**Recommended floor to ship:** milestones 0–5a plus 6, 7 are done — the full open-source +
-cyber-fusion story runs today. Next: 5b (the React dashboard). Live deployment follows that —
-it is not imminent.
+**Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
+story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the
+deferred live deployment (9) — neither imminent.
 
 ## Design decisions already locked
 
