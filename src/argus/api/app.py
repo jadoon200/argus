@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from argus import __version__
-from argus.agent.analyst import generate_brief
+from argus.agent.analyst import gather_evidence, generate_brief
 from argus.agent.llm import ollama_models, resolve_backend
 from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
 from argus.config import get_settings
@@ -121,6 +121,23 @@ class BriefOut(BaseModel):
 
 class BriefRequest(BaseModel):
     query: str = Field(min_length=1)
+
+
+class EvidenceOut(BaseModel):
+    doc_id: str
+    title: str
+    source: str
+    reliability: str  # Admiralty source reliability A-F
+    credibility: int | None  # Admiralty information credibility 1-6
+    rating: str  # compact Admiralty code, e.g. "B2"
+    summary: str | None
+    published: str | None
+    url: str | None
+
+
+class RetrieveRequest(BaseModel):
+    query: str = Field(min_length=1)
+    k: int = Field(default=8, ge=1, le=50)
 
 
 # --- read-only routes ----------------------------------------------------------------
@@ -242,6 +259,34 @@ def brief_detail(brief_id: int, db: Session = Depends(get_db)) -> BriefOut:
     if row is None:
         raise HTTPException(status_code=404, detail="brief not found")
     return _brief_out(row)
+
+
+# --- read-only OSINT retrieval (the reverse-direction fusion hook) -------------------
+@app.post("/retrieve", response_model=list[EvidenceOut])
+def retrieve(
+    payload: RetrieveRequest, request: Request, db: Session = Depends(get_db)
+) -> list[EvidenceOut]:
+    """Hybrid OSINT retrieval — rated evidence for a query, no LLM. Lets a sibling platform
+    (e.g. SENTINEL) pull the open-source picture relevant to its own analysis. Read-only and
+    cheap (rate-limited, but no inference-concurrency cap)."""
+    if len(payload.query) > settings.api_max_request_chars:
+        raise HTTPException(status_code=422, detail="query too long")
+    if not _rate_limiter.allow(request):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    return [
+        EvidenceOut(
+            doc_id=e.doc_id,
+            title=e.title,
+            source=e.source,
+            reliability=e.reliability,
+            credibility=e.credibility,
+            rating=e.rating(),
+            summary=e.summary,
+            published=e.published,
+            url=e.url,
+        )
+        for e in gather_evidence(db, payload.query, payload.k)
+    ]
 
 
 # --- the expensive agent route (guarded) ---------------------------------------------
