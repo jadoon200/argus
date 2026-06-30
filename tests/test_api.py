@@ -85,6 +85,16 @@ def test_brief_rejects_oversized_query(client: TestClient) -> None:
     assert r.status_code == 422
 
 
+def test_retrieve_returns_rated_osint(client: TestClient) -> None:
+    # The reverse-fusion hook: hybrid retrieval -> rated evidence, no LLM.
+    r = client.post("/retrieve", json={"query": "standoff at the disputed reef", "k": 3})
+    assert r.status_code == 200
+    items = r.json()
+    assert items and items[0]["doc_id"] == "reuters.com:1"
+    assert items[0]["reliability"] == "B" and items[0]["rating"] == "B3"
+    assert "title" in items[0] and "source" in items[0]
+
+
 def test_brief_rate_limited(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_module, "_rate_limiter", RateLimiter(1, 60.0, False))
     assert client.post("/brief", json={"query": "first"}).status_code == 200
