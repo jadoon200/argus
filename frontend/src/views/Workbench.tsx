@@ -35,7 +35,7 @@ function Rating({ rating, reliability, credibility }: Pick<EvidenceOut, "rating"
 
 function EvidenceCard({ e }: { e: EvidenceOut }) {
   // Cyber-fusion evidence (pulled from the sibling SENTINEL graph) carries a campaign id.
-  const cyber = e.doc_id.startsWith("campaign:") || e.source === "sentinel";
+  const cyber = e.doc_id.startsWith("sentinel-cyber:") || e.source === "sentinel-cyber";
   return (
     <article className={`ev${cyber ? " cyber" : ""}`}>
       <div className="ev-top">
@@ -85,14 +85,25 @@ function Brief({ b }: { b: BriefOut }) {
         </ul>
       )}
       {b.body && <p className="brief-body">{b.body}</p>}
-      {b.citations.length > 0 && (
-        <div className="cites">
-          {b.citations.map((c) => (
-            <span key={c} className="cite">
-              {c}
-            </span>
+      {b.evidence.length > 0 ? (
+        <div className="brief-evidence">
+          <p className="section-note" style={{ margin: "10px 0" }}>
+            <b>Cited evidence</b> — the {b.evidence.length} source-rated items behind this brief.
+          </p>
+          {b.evidence.map((e) => (
+            <EvidenceCard key={e.doc_id} e={e} />
           ))}
         </div>
+      ) : (
+        b.citations.length > 0 && (
+          <div className="cites">
+            {b.citations.map((c) => (
+              <span key={c} className="cite">
+                {c}
+              </span>
+            ))}
+          </div>
+        )
       )}
     </section>
   );

@@ -69,6 +69,9 @@ class BriefResult:
     hypotheses: list[str] = field(default_factory=list)
     ach_ranking: list["HypothesisScore"] = field(default_factory=list)  # ACH, strongest first
     critique_response: str | None = None  # how the finding answers the strongest challenge
+    # The evidence the brief was generated from (incl. cyber-fusion items), so callers
+    # can show the cited items with their Admiralty ratings without a second retrieval.
+    evidence: list[EvidenceItem] = field(default_factory=list)
     backend: str = "template"
 
 
