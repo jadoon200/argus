@@ -53,6 +53,9 @@ export interface BriefOut {
   backend: string | null;
   key_judgments: string[];
   citations: string[];
+  /** Cited evidence with Admiralty ratings (incl. cyber-fusion items), in citation
+   *  order. Populated on a fresh POST /brief; [] for persisted listings. */
+  evidence: EvidenceOut[];
   body: string;
   created_at: string | null;
 }

@@ -330,6 +330,7 @@ def generate_brief(
         else:
             state = run_deliberation(query, evidence, resolved)
             result = _assemble(query, evidence, state, resolved.name)
+    result.evidence = evidence
 
     if persist and session is not None:
         session.add(

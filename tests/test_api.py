@@ -74,9 +74,13 @@ def test_brief_roundtrip_persists(client: TestClient) -> None:
     body = r.json()
     assert body["backend"] == "template"
     assert "reuters.com:1" in body["citations"]
-    # it was persisted and is now listable
+    # the cited evidence rides along, rated, so the dashboard can render evidence cards
+    assert [e["doc_id"] for e in body["evidence"]] == body["citations"]
+    assert body["evidence"][0]["rating"] == "B3"
+    # it was persisted and is now listable (persisted listings carry no evidence items)
     listed = client.get("/briefs").json()
     assert len(listed) == 1
+    assert listed[0]["evidence"] == []
     assert client.get(f"/briefs/{listed[0]['brief_id']}").status_code == 200
 
 
