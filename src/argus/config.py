@@ -63,7 +63,9 @@ class Settings(BaseSettings):
     # auto NEVER selects a remote/paid backend (zero-cost by default). Explicit values:
     # "ollama" | "mlx" | "openai" | "anthropic" | "template" | "auto".
     llm_backend: str = "auto"
-    anthropic_api_key: str | None = None  # also read from ANTHROPIC_API_KEY (see agent/llm.py)
+    # Paid, strictly opt-in: only read as ARGUS_ANTHROPIC_API_KEY, and only used when
+    # llm_backend is explicitly "anthropic". Unset -> the paid path cannot be reached.
+    anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-4-8"
     ollama_url: str = "http://localhost:11434"
     # Preferred Ollama model; the backend auto-falls back to any installed model if
