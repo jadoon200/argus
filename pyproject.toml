@@ -68,6 +68,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 python_version = "3.12"
 strict = true
 mypy_path = "src"
+files = ["src/argus"]
 explicit_package_bases = true
 
 # Third-party libraries without type stubs — scoped, do not widen.

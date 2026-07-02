@@ -24,6 +24,7 @@ class RateLimiter:
         self._trust_forwarded = trust_forwarded
         self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
+        self._last_sweep = time.monotonic()
 
     def _client_key(self, request: "Request") -> str:
         if self._trust_forwarded:
@@ -32,10 +33,22 @@ class RateLimiter:
                 return forwarded.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
+    def _sweep(self, now: float) -> None:
+        """Drop clients whose every hit has aged out — without this, one-off clients
+        (e.g. a scan from many IPs) would accumulate keys forever."""
+        if now - self._last_sweep < self._window:
+            return
+        self._last_sweep = now
+        cutoff = now - self._window
+        stale = [key for key, hits in self._hits.items() if not hits or hits[-1] <= cutoff]
+        for key in stale:
+            del self._hits[key]
+
     def allow(self, request: "Request") -> bool:
         now = time.monotonic()
         key = self._client_key(request)
         with self._lock:
+            self._sweep(now)
             hits = self._hits[key]
             while hits and hits[0] <= now - self._window:
                 hits.popleft()
