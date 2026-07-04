@@ -74,10 +74,20 @@ def test_brief_roundtrip_persists(client: TestClient) -> None:
     body = r.json()
     assert body["backend"] == "template"
     assert "reuters.com:1" in body["citations"]
-    # it was persisted and is now listable
+    # the cited evidence rides along, rated, so the dashboard can render evidence cards
+    assert [e["doc_id"] for e in body["evidence"]] == body["citations"]
+    assert body["evidence"][0]["rating"] == "B3"
+    # it was persisted and is now listable (persisted listings carry no evidence items)
     listed = client.get("/briefs").json()
     assert len(listed) == 1
-    assert client.get(f"/briefs/{listed[0]['brief_id']}").status_code == 200
+    assert listed[0]["evidence"] == []
+    detail = client.get(f"/briefs/{listed[0]['brief_id']}")
+    assert detail.status_code == 200
+    # tradecraft sections round-trip through persistence (template digest sets gaps;
+    # the deliberated path fills assumptions/indicators/ach_ranking too).
+    stored = detail.json()
+    assert stored["gaps"] and "deterministic fallback" in stored["gaps"]
+    assert stored["key_assumptions"] == [] and stored["ach_ranking"] == []
 
 
 def test_brief_rejects_oversized_query(client: TestClient) -> None:

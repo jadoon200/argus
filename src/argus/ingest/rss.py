@@ -9,7 +9,7 @@ import hashlib
 import html
 import re
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree
 
@@ -39,11 +39,20 @@ def _clean(text: str | None) -> str | None:
     return re.sub(r"\s+", " ", stripped).strip() or None
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    """Normalise to tz-aware UTC; a date with no offset is assumed to be UTC.
+
+    GDELT timestamps are always aware, so a naive feed date would otherwise crash the
+    naive-vs-aware comparisons in event clustering (and be misread by timestamptz).
+    """
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
 def _parse_rfc822(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return parsedate_to_datetime(value)
+        return _ensure_utc(parsedate_to_datetime(value))
     except (ValueError, TypeError):
         return None
 
@@ -52,7 +61,7 @@ def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return _ensure_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
     except ValueError:
         return None
 

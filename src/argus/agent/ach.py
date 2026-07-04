@@ -8,6 +8,8 @@ and rank ascending. A pure function over the matrix the agent produces — testa
 identical whether the matrix came from an LLM or the deterministic fallback.
 """
 
+import re
+
 from argus.agent.schemas import AchMatrix
 from argus.agent.state import EvidenceItem, HypothesisScore, evidence_labels
 
@@ -22,10 +24,23 @@ _RELIABILITY_WEIGHT: dict[str, float] = {
     "E": 0.3,
     "F": 0.5,  # "cannot be judged" — mid, neither trusted nor dismissed
 }
+_NUM_RE = re.compile(r"\d+")
 
 
 def _weight(reliability: str) -> float:
     return _RELIABILITY_WEIGHT.get((reliability or "F").upper(), 0.5)
+
+
+def _cell_weight(label: str, weights: dict[str, float]) -> float | None:
+    """Reliability weight for a cell's evidence label, tolerating `E1` / `1` / `[E1]`
+    variants. Returns None when the label doesn't resolve to a real evidence item — such
+    a cell is a fabricated reference and is dropped from the score, the same
+    resolvability invariant the citations enforce (a hallucinated `E9` can't disconfirm)."""
+    label = label.strip().strip("[]")
+    if label in weights:
+        return weights[label]
+    match = _NUM_RE.search(label)
+    return weights.get(f"E{int(match.group())}") if match else None
 
 
 def score_matrix(matrix: AchMatrix, evidence: list[EvidenceItem]) -> list[HypothesisScore]:
@@ -40,8 +55,11 @@ def score_matrix(matrix: AchMatrix, evidence: list[EvidenceItem]) -> list[Hypoth
         inconsistency = 0.0
         consistent = inconsistent = 0
         for cell in row.cells:
+            weight = _cell_weight(cell.evidence, weights)
+            if weight is None:  # references evidence that doesn't exist — drop it
+                continue
             if cell.assessment == "inconsistent":
-                inconsistency += weights.get(cell.evidence.strip(), 0.5)
+                inconsistency += weight
                 inconsistent += 1
             elif cell.assessment == "consistent":
                 consistent += 1

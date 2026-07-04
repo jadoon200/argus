@@ -80,11 +80,23 @@ class OllamaBackend:
 class AnthropicBackend:
     """Claude backend (paid, opt-in). Only selected when explicitly requested."""
 
+    # Generous ceiling: a truncated structured Finding is invalid JSON, which silently
+    # demotes the deliberation to the free-form fallback.
+    _MAX_TOKENS = 8192
+
     def __init__(self, api_key: str, model: str, timeout: float) -> None:
         self.name = f"anthropic:{model}"
         self._api_key = api_key
         self._model = model
         self._timeout = timeout
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            import anthropic  # optional dependency, imported lazily
+
+            self._client = anthropic.Anthropic(api_key=self._api_key, timeout=self._timeout)
+        return self._client
 
     def complete(
         self,
@@ -93,15 +105,12 @@ class AnthropicBackend:
         response_schema: dict[str, Any] | None = None,
         temperature: float | None = None,
     ) -> str:
-        import anthropic  # optional dependency, imported lazily
-
         if response_schema is not None:
             schema_json = json.dumps(response_schema)
             user = f"{user}\n\nRespond with ONLY valid JSON matching this schema:\n{schema_json}"
-        client = anthropic.Anthropic(api_key=self._api_key, timeout=self._timeout)
-        message = client.messages.create(
+        message = self._get_client().messages.create(
             model=self._model,
-            max_tokens=2048,
+            max_tokens=self._MAX_TOKENS,
             temperature=_DEFAULT_TEMPERATURE if temperature is None else temperature,
             system=system,
             messages=[{"role": "user", "content": user}],

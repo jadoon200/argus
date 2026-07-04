@@ -46,6 +46,14 @@ export interface NarrativeOut {
   last_seen: string | null;
 }
 
+/** One competing hypothesis's ACH score — lower inconsistency = less disconfirmed = stronger. */
+export interface AchScore {
+  hypothesis: string;
+  inconsistency: number;
+  consistent: number;
+  inconsistent: number;
+}
+
 export interface BriefOut {
   brief_id: number;
   query: string;
@@ -53,6 +61,17 @@ export interface BriefOut {
   backend: string | null;
   key_judgments: string[];
   citations: string[];
+  // Structured Analytic Technique sections — the full intelligence product.
+  key_assumptions: string[];
+  indicators: string[];
+  hypotheses: string[];
+  ach_ranking: AchScore[];
+  alternatives: string | null;
+  gaps: string | null;
+  critique_response: string | null;
+  /** Cited evidence with Admiralty ratings (incl. cyber-fusion items), in citation
+   *  order. Populated on a fresh POST /brief; [] for persisted listings. */
+  evidence: EvidenceOut[];
   body: string;
   created_at: string | null;
 }
