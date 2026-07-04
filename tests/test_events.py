@@ -45,5 +45,24 @@ def test_rebuild_events_clusters_and_scores_credibility(session: Session) -> Non
     assert session.get(Document, "c").credibility == 4
 
 
+def test_rebuild_events_stores_framing_divergence(session: Session) -> None:
+    session.add(Source(label="reuters.com", reliability="B"))
+    session.add(Source(label="rt.com", reliability="D"))
+    # Two framings of the same event, divergent (cosine 0.6) but close enough to cluster
+    # at a loose threshold — the contested-event case.
+    session.add(
+        Document(doc_id="a", source="reuters.com", title="x", embedding=[1.0, 0.0], published=_T)
+    )
+    session.add(
+        Document(doc_id="b", source="rt.com", title="y", embedding=[0.6, 0.8], published=_T)
+    )
+    session.flush()
+
+    rebuild_events(session, threshold=0.5, window=timedelta(days=3))
+    event = session.query(Event).one()
+    assert event.doc_count == 2
+    assert event.divergence is not None and event.divergence > 0.3  # 1 - 0.6 = 0.4
+
+
 def test_rebuild_events_empty_corpus(session: Session) -> None:
     assert rebuild_events(session, threshold=0.78, window=timedelta(days=3)) == 0
