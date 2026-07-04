@@ -21,25 +21,30 @@ Given a labelled query → relevant-documents set, score the hybrid (BM25 + dens
 ### 2. Citation accuracy (the headline)
 Every claim in a brief carries a citation `[doc_id]`. We check, per cited claim:
 
-- **Resolvable** — does `doc_id` exist in the corpus? (A fabricated citation is the worst
-  failure mode; target **100%** resolvable, enforced in code, not just measured.)
-- **Supporting** — does the cited document actually support the claim? (LLM-as-judge with a
-  cheap/local judge, spot-checked against a human-labelled subset.)
+- **Resolvable** — does `doc_id` exist in the corpus? A fabricated citation is the worst
+  failure mode, so this is **enforced in code, not just measured**: every citation resolves
+  through `_resolve_citations`/`_resolve_label` and anything unresolvable is dropped (and the
+  attempt counted). The eval's "fabrication attempts caught" number is the audit of that.
+- **Supporting** — does the cited item actually support the claim? Implemented as an
+  **LLM-as-judge** (`argus/eval/judge.py`): a strict judge reads each key judgment against the
+  evidence and returns a structured `{grounded, supported}` verdict. Free/local (the same
+  Ollama backend); runs only when a backend is available (the deterministic eval stays LLM-free
+  and CI-safe). Numbers are auto-recorded below when `make eval` runs with a model.
 
 | Metric | Definition | Result |
 |---|---|---|
-| Citation resolvable rate | cited `doc_id`s that exist | TBD (hard target 100%) |
-| Citation support rate | cited docs that support their claim | TBD |
-| Judge–human agreement | judge vs human labels on the support call | TBD |
+| Citation resolvable rate | cited `doc_id`s that exist | **100% (enforced)** |
+| Citation support rate | cited items that support their claim | see auto-recorded block |
+| Judge–human agreement | judge vs human labels on the support call | TBD (spot-check) |
 
 ### 3. Faithfulness / groundedness
-Fraction of brief claims that are supported by *some* retrieved document (no free-floating
-assertions). Hallucinated-claim rate is the inverse and is reported directly.
+Fraction of key judgments the LLM-judge finds **grounded** in *some* evidence item (no
+free-floating assertions); the hallucinated-claim rate is the inverse. Measured by the same
+`judge_brief`; recorded in the auto block below.
 
-| Metric | Result |
-|---|---|
-| Grounded-claim rate | TBD |
-| Hallucinated-claim rate | TBD |
+> **Self-judging caveat.** With a local model the judge and the analyst are the same family,
+> so these numbers carry a known optimism bias — they are a regression signal, not ground
+> truth. The honest fix is judge–human agreement on a labelled subset (above, TBD).
 
 ### 4. Source-reliability calibration
 Does the Admiralty rating mean anything? We check that higher-rated sources are, empirically,
