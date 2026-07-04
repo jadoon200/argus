@@ -15,8 +15,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from argus import __version__
-from argus.agent.analyst import gather_evidence, generate_brief
+from argus.agent.analyst import gather_evidence, generate_brief, to_brief_row
 from argus.agent.llm import ollama_models, resolve_backend
+from argus.agent.state import EvidenceItem
 from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
 from argus.config import get_settings
 from argus.db.base import get_session_factory
@@ -108,21 +109,6 @@ class NarrativeOut(BaseModel):
     last_seen: str | None
 
 
-class BriefOut(BaseModel):
-    brief_id: int
-    query: str
-    confidence: str | None
-    backend: str | None
-    key_judgments: list[str]
-    citations: list[str]
-    body: str
-    created_at: str | None
-
-
-class BriefRequest(BaseModel):
-    query: str = Field(min_length=1)
-
-
 class EvidenceOut(BaseModel):
     doc_id: str
     title: str
@@ -133,6 +119,39 @@ class EvidenceOut(BaseModel):
     summary: str | None
     published: str | None
     url: str | None
+
+
+class AchScoreOut(BaseModel):
+    hypothesis: str
+    inconsistency: float  # reliability-weighted disconfirming evidence (lower = stronger)
+    consistent: int
+    inconsistent: int
+
+
+class BriefOut(BaseModel):
+    brief_id: int
+    query: str
+    confidence: str | None
+    backend: str | None
+    key_judgments: list[str]
+    citations: list[str]
+    # Structured Analytic Technique sections — the full intelligence product.
+    key_assumptions: list[str] = []
+    indicators: list[str] = []
+    hypotheses: list[str] = []
+    ach_ranking: list[AchScoreOut] = []
+    alternatives: str | None = None
+    gaps: str | None = None
+    critique_response: str | None = None
+    # The cited evidence items with their Admiralty ratings (incl. cyber-fusion items),
+    # in citation order. Populated on a fresh POST /brief; [] for persisted listings.
+    evidence: list[EvidenceOut] = []
+    body: str
+    created_at: str | None
+
+
+class BriefRequest(BaseModel):
+    query: str = Field(min_length=1)
 
 
 class RetrieveRequest(BaseModel):
@@ -181,7 +200,10 @@ def sources(db: Session = Depends(get_db)) -> list[SourceOut]:
 @app.get("/documents", response_model=list[DocumentOut])
 def documents(limit: int = 50, db: Session = Depends(get_db)) -> list[DocumentOut]:
     limit = max(1, min(limit, 200))
-    rows = db.scalars(select(Document).order_by(Document.published.desc()).limit(limit)).all()
+    # nulls_last: Postgres puts NULLs first under DESC, which would lead with undated docs.
+    rows = db.scalars(
+        select(Document).order_by(Document.published.desc().nulls_last()).limit(limit)
+    ).all()
     return [
         DocumentOut(
             doc_id=d.doc_id,
@@ -233,7 +255,21 @@ def narratives(limit: int = 50, db: Session = Depends(get_db)) -> list[Narrative
     ]
 
 
-def _brief_out(b: Brief) -> BriefOut:
+def _evidence_out(e: EvidenceItem) -> EvidenceOut:
+    return EvidenceOut(
+        doc_id=e.doc_id,
+        title=e.title,
+        source=e.source,
+        reliability=e.reliability,
+        credibility=e.credibility,
+        rating=e.rating(),
+        summary=e.summary,
+        published=e.published,
+        url=e.url,
+    )
+
+
+def _brief_out(b: Brief, evidence: list[EvidenceOut] | None = None) -> BriefOut:
     return BriefOut(
         brief_id=b.brief_id,
         query=b.query,
@@ -241,6 +277,14 @@ def _brief_out(b: Brief) -> BriefOut:
         backend=b.backend,
         key_judgments=b.key_judgments or [],
         citations=b.citations or [],
+        key_assumptions=b.key_assumptions or [],
+        indicators=b.indicators or [],
+        hypotheses=b.hypotheses or [],
+        ach_ranking=[AchScoreOut(**row) for row in (b.ach_ranking or [])],
+        alternatives=b.alternatives,
+        gaps=b.gaps,
+        critique_response=b.critique_response,
+        evidence=evidence or [],
         body=b.body,
         created_at=b.created_at.isoformat() if b.created_at else None,
     )
@@ -273,20 +317,7 @@ def retrieve(
         raise HTTPException(status_code=422, detail="query too long")
     if not _rate_limiter.allow(request):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
-    return [
-        EvidenceOut(
-            doc_id=e.doc_id,
-            title=e.title,
-            source=e.source,
-            reliability=e.reliability,
-            credibility=e.credibility,
-            rating=e.rating(),
-            summary=e.summary,
-            published=e.published,
-            url=e.url,
-        )
-        for e in gather_evidence(db, payload.query, payload.k)
-    ]
+    return [_evidence_out(e) for e in gather_evidence(db, payload.query, payload.k)]
 
 
 # --- the expensive agent route (guarded) ---------------------------------------------
@@ -304,15 +335,12 @@ def create_brief(
     except SlotUnavailable as exc:
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
 
-    row = Brief(
-        query=result.query,
-        body=result.body,
-        confidence=result.confidence,
-        backend=result.backend,
-        key_judgments=result.key_judgments or None,
-        citations=result.citations or None,
-    )
+    row = to_brief_row(result)
     db.add(row)
     db.commit()
     db.refresh(row)
-    return _brief_out(row)
+    # Return the cited evidence items (in citation order) so the dashboard can render
+    # rated evidence cards — including cyber-fusion items, which have no Document row.
+    by_id = {e.doc_id: e for e in result.evidence}
+    cited = [_evidence_out(by_id[c]) for c in result.citations if c in by_id]
+    return _brief_out(row, cited)

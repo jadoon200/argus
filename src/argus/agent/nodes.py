@@ -22,7 +22,7 @@ from argus.agent.personas import (
 )
 from argus.agent.schemas import AchMatrix, Critique, Critiques, Finding, Hypotheses
 from argus.agent.state import DeliberationState, format_evidence
-from argus.agent.structured import complete_model
+from argus.agent.structured import complete_model, safe_complete
 
 _HYPOTHESIS_RE = re.compile(r"^\s*H\d+\s*[:.)\-]\s*(.+?)\s*$")
 _DEFAULT_HYPOTHESES = 3
@@ -66,7 +66,7 @@ def propose_hypotheses(state: DeliberationState, backend: LLMBackend) -> Deliber
         hyps = structured.hypotheses[:n]
         raw = "\n".join(f"H{i + 1}: {h}" for i, h in enumerate(hyps))
     else:  # JSON failed — parse free-form H1:/H2: lines, else any non-empty lines
-        raw = backend.complete(HYPOTHESIS_SYSTEM, user, temperature=HYPOTHESIS_TEMP)
+        raw = safe_complete(backend, HYPOTHESIS_SYSTEM, user, temperature=HYPOTHESIS_TEMP)
         hyps = [m.group(1) for line in raw.splitlines() if (m := _HYPOTHESIS_RE.match(line))]
         if not hyps:
             hyps = [ln.strip("-* ").strip() for ln in raw.splitlines() if ln.strip()]
@@ -115,7 +115,7 @@ def analyst(state: DeliberationState, backend: LLMBackend) -> DeliberationState:
         f"ACH RANKING (least-disconfirmed first):\n{_ranking_block(state)}{rebuttal}\n\n"
         "Give your assessment."
     )
-    text = backend.complete(ANALYST_SYSTEM, user, temperature=ANALYST_TEMP)
+    text = safe_complete(backend, ANALYST_SYSTEM, user, temperature=ANALYST_TEMP)
     return {"analyst": text, "transcript": _append(state, "analyst", text)}
 
 
@@ -142,7 +142,7 @@ def red_team(state: DeliberationState, backend: LLMBackend) -> DeliberationState
         text = _render_critiques(new_struct)
     else:  # free-form fallback: keep the prose, no structured critiques this round
         new_struct = []
-        text = backend.complete(RED_TEAM_SYSTEM, user, temperature=RED_TEAM_TEMP)
+        text = safe_complete(backend, RED_TEAM_SYSTEM, user, temperature=RED_TEAM_TEMP)
     return {
         "critiques": [*state.get("critiques", []), text],
         "critiques_struct": [*state.get("critiques_struct", []), *new_struct],
@@ -200,5 +200,7 @@ def adjudicate(state: DeliberationState, backend: LLMBackend) -> DeliberationSta
             "finding_struct": structured,
             "transcript": _append(state, "adjudicator", text),
         }
-    text = backend.complete(ADJUDICATOR_SYSTEM, user, temperature=ADJUDICATOR_TEMP)  # free-form
+    text = safe_complete(
+        backend, ADJUDICATOR_SYSTEM, user, temperature=ADJUDICATOR_TEMP
+    )  # free-form
     return {"finding": text, "transcript": _append(state, "adjudicator", text)}

@@ -16,6 +16,7 @@ from argus.agent.analyst import generate_brief
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.state import evidence_labels
 from argus.eval.goldset import QUERIES, corpus_retrieved, evidence_by_id
+from argus.eval.judge import judge_brief
 from argus.eval.metrics import (
     citation_coverage,
     citation_markers,
@@ -41,6 +42,9 @@ class QueryReport:
     n_citations: int
     fabricated: list[str]
     over_confident: bool
+    # Reading-dependent (LLM-judge) metrics — None on the deterministic/template path.
+    faithfulness: float | None = None
+    citation_support: float | None = None
 
 
 def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
@@ -58,6 +62,12 @@ def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
         valid = set(evidence_labels(evidence)) | {e.doc_id for e in evidence}
         fabricated = sorted({m for m in citation_markers(brief.body) if m not in valid})
 
+        faithfulness = citation_support = None
+        if backend is not None and brief.key_judgments:  # LLM-judge only when a model is present
+            judged = judge_brief(brief.key_judgments, evidence, backend)
+            if judged.n:
+                faithfulness, citation_support = judged.faithfulness, judged.citation_support
+
         reports.append(
             QueryReport(
                 query=gold.query,
@@ -68,6 +78,8 @@ def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
                 n_citations=len(brief.citations),
                 fabricated=fabricated,
                 over_confident=exceeds_confidence(brief.confidence, gold.max_confidence),
+                faithfulness=faithfulness,
+                citation_support=citation_support,
             )
         )
     return reports
@@ -98,6 +110,15 @@ def _results_table(reports: list[QueryReport]) -> list[str]:
         f"- **calibration trap breaches**: {sum(1 for r in reports if r.over_confident)} "
         "(brief exceeded the confidence a single low-reliability source warrants)",
     ]
+    judged = [r for r in reports if r.faithfulness is not None]
+    if judged:  # only when an LLM judge ran (a backend was available)
+        support = [r.citation_support for r in judged if r.citation_support is not None]
+        lines += [
+            f"- **mean faithfulness (grounded claims, LLM-judge)**: "
+            f"{_mean([r.faithfulness for r in judged if r.faithfulness is not None]):.2f}",
+            f"- **mean citation support (cited evidence backs the claim, LLM-judge)**: "
+            f"{_mean(support):.2f}",
+        ]
     return lines
 
 

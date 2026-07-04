@@ -117,7 +117,10 @@ class SentinelBridge:
         into both the summary and the credibility. With a `query`, only campaigns relevant
         to it (technique overlap via SENTINEL's mapper) are kept.
         """
-        campaigns = self.campaigns(limit)
+        # With a query the relevance filter runs *after* the fetch, so pull a deeper
+        # salience-ordered pool first — otherwise a query-relevant campaign outside the
+        # top-`limit` most-salient would be silently dropped.
+        campaigns = self.campaigns(limit * 10 if query else limit)
         if query:
             campaigns = self._rank_by_relevance(campaigns, query, min_score)
         items: list[EvidenceItem] = []

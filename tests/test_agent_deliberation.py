@@ -246,6 +246,44 @@ def test_generate_brief_student_mode_one_shots(monkeypatch: pytest.MonkeyPatch) 
     assert result.citations == ["reuters.com:1"]
 
 
+def test_deliberation_backend_timeout_degrades_to_digest() -> None:
+    import httpx
+
+    class TimingOutBackend:
+        """Every call raises a timeout — the deliberation must not crash; it degrades
+        to the labelled deterministic digest instead of 500-ing a /brief request."""
+
+        name = "flaky"
+
+        def complete(
+            self,
+            system: str,
+            user: str,
+            response_schema: dict[str, Any] | None = None,
+            temperature: float | None = None,
+        ) -> str:
+            raise httpx.ReadTimeout("timed out")
+
+    result = generate_brief("q?", evidence=_EVIDENCE, backend=TimingOutBackend(), persist=False)
+    assert result.backend == "template"  # fell back to the digest
+    assert result.citations  # still returns a cited product
+    assert result.gaps and "deterministic fallback" in result.gaps
+
+
+def test_citation_resolution_rejects_prose_numbers() -> None:
+    from argus.agent.analyst import _resolve_citations
+
+    lm = {"E1": "reuters.com:1", "E2": "apnews.com:2"}
+    # explicit labels and a pure number-list both resolve
+    assert _resolve_citations("escalation [E1] and [1, 2]", lm) == ["reuters.com:1", "apnews.com:2"]
+    # a bare number inside prose is NOT a citation (was the spurious-E2 bug)
+    assert _resolve_citations("[2 vessels] massed near the reef", lm) == []
+    # an explicit E# still resolves even in a mixed/prose bracket
+    assert _resolve_citations("[E1 — see reuters]", lm) == ["reuters.com:1"]
+    # a raw doc id resolves
+    assert _resolve_citations("[apnews.com:2]", lm) == ["apnews.com:2"]
+
+
 def test_template_fallback_is_labelled_digest() -> None:
     result = extractive_brief("q?", _EVIDENCE)
     assert result.backend == "template"

@@ -49,7 +49,9 @@ export function Narratives() {
     <div>
       <p className="section-note">
         Narrative clusters group documents by shared <b>framing</b>, ranked by a transparent{" "}
-        <b>coordination signal</b> in [0,1] = burstiness × low-reliability share. It is{" "}
+        <b>coordination signal</b> in [0,1] = burstiness × (0.5 + 0.5 × low-reliability share), so
+        organic breaking-news bursts are dampened and a synchronized, state-affiliated-heavy push
+        scores highest. It is{" "}
         <b>decision support for a human reviewer</b>, never an automated verdict of inauthenticity —
         a high score flags a story worth a closer look, not a confirmed influence operation.
       </p>

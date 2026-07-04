@@ -171,5 +171,15 @@ class Brief(Base):
     key_judgments: Mapped[list[str] | None] = mapped_column(JsonType)
     citations: Mapped[list[str] | None] = mapped_column(JsonType)  # doc_ids
     confidence: Mapped[str | None] = mapped_column(String(16))  # low|moderate|high
+    # Structured Analytic Technique sections (see agent/schemas.py Finding) — persisted
+    # so the dashboard renders the full intelligence product, not a text blob.
+    key_assumptions: Mapped[list[str] | None] = mapped_column(JsonType)  # Key Assumptions Check
+    indicators: Mapped[list[str] | None] = mapped_column(JsonType)  # Indicators & Warnings
+    hypotheses: Mapped[list[str] | None] = mapped_column(JsonType)  # competing hypotheses framed
+    # ACH scoring matrix rows: {hypothesis, inconsistency, consistent, inconsistent}.
+    ach_ranking: Mapped[list[dict[str, Any]] | None] = mapped_column(JsonType)
+    alternatives: Mapped[str | None] = mapped_column(Text())  # most credible alternative
+    gaps: Mapped[str | None] = mapped_column(Text())  # intelligence gaps
+    critique_response: Mapped[str | None] = mapped_column(Text())  # answer to the red team
     backend: Mapped[str | None] = mapped_column(String(32))  # which LLM backend produced it
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

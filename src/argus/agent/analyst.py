@@ -149,13 +149,16 @@ def _strip_bullet(line: str) -> str:
     return line.lstrip("-*•· ").strip()
 
 
-def _resolve_label(token: str, label_map: dict[str, str], valid_ids: set[str]) -> str | None:
-    """Map one citation token to a real doc id, tolerating label variants.
+_CITE_SHAPED_RE = re.compile(r"^[Ee]?\d+$")  # E1, e1, or a bare 1 (bracket-stripped)
+_EXPLICIT_LABEL_RE = re.compile(r"^[Ee]\d+$")  # E1 / e1 only — an unambiguous label
 
-    Models cite inconsistently — `E1`, `1`, `[E1]`, even the raw doc id. We accept a
-    raw doc id, the exact label, or any token carrying the label's number (so `1` and
-    `E1` both resolve to E1). Anything that still doesn't map returns None and is
-    dropped — the citation-resolvability invariant: a brief never carries a fabrication.
+
+def _resolve_label(token: str, label_map: dict[str, str], valid_ids: set[str]) -> str | None:
+    """Map one citation-array token to a real doc id, tolerating label variants.
+
+    For the *structured* path, where the model put the token in a dedicated citations
+    array: `E1`, `1`, `[E1]`, or the raw doc id all resolve. Anything that doesn't map
+    returns None and is dropped — the resolvability invariant: no fabricated citation.
     """
     token = token.strip()
     if token in valid_ids:
@@ -166,12 +169,30 @@ def _resolve_label(token: str, label_map: dict[str, str], valid_ids: set[str]) -
     return label_map.get(f"E{int(match.group())}") if match else None
 
 
+def _resolve_explicit(token: str, label_map: dict[str, str], valid_ids: set[str]) -> str | None:
+    """Resolve only *unambiguous* references — a raw doc id or an `E#`-prefixed label —
+    never a bare number, which in prose is ambiguous (`[2 vessels]` is not a citation)."""
+    token = token.strip()
+    if token in valid_ids:
+        return token
+    if token in label_map:
+        return label_map[token]
+    match = _EXPLICIT_LABEL_RE.match(token)
+    return label_map.get(f"E{int(match.group()[1:])}") if match else None
+
+
 def _resolve_citations(text: str, label_map: dict[str, str]) -> list[str]:
+    """Extract citations from free text. A bracket resolves bare numbers as labels only
+    when it is a *pure* citation list (every token is a label/number/doc id) — so `[1, 2]`
+    cites E1/E2, but `[2 vessels]` cites nothing (only explicit `E#`/doc ids survive there)."""
     valid_ids = set(label_map.values())
     out: list[str] = []
     for inner in _CITATION_RE.findall(text):
-        for token in re.split(r"[,\s]+", inner.strip()):
-            doc_id = _resolve_label(token, label_map, valid_ids)
+        tokens = [t for t in re.split(r"[,;\s]+", inner.strip()) if t]
+        pure = bool(tokens) and all(t in valid_ids or _CITE_SHAPED_RE.match(t) for t in tokens)
+        resolve = _resolve_label if pure else _resolve_explicit
+        for token in tokens:
+            doc_id = resolve(token, label_map, valid_ids)
             if doc_id and doc_id not in out:
                 out.append(doc_id)
     return out
@@ -294,6 +315,54 @@ def oneshot_brief(query: str, evidence: list[EvidenceItem], backend: LLMBackend)
     )
 
 
+def to_brief_row(result: BriefResult) -> Brief:
+    """Map a BriefResult onto a persistable Brief row — the FULL structured product
+    (tradecraft sections included), so the dashboard never has to re-parse the body."""
+    return Brief(
+        query=result.query,
+        body=result.body,
+        key_judgments=result.key_judgments or None,
+        citations=result.citations or None,
+        confidence=result.confidence,
+        key_assumptions=result.key_assumptions or None,
+        indicators=result.indicators or None,
+        hypotheses=result.hypotheses or None,
+        ach_ranking=[
+            {
+                "hypothesis": h.hypothesis,
+                "inconsistency": h.inconsistency,
+                "consistent": h.consistent,
+                "inconsistent": h.inconsistent,
+            }
+            for h in result.ach_ranking
+        ]
+        or None,
+        alternatives=result.alternatives,
+        gaps=result.gaps,
+        critique_response=result.critique_response,
+        backend=result.backend,
+    )
+
+
+def _deliberate_or_digest(
+    query: str, evidence: list[EvidenceItem], backend: LLMBackend
+) -> BriefResult:
+    """Run the multi-agent panel, with the deterministic digest as a hard backstop: if the
+    deliberation raises (an unrecoverable backend/graph failure) or yields no key judgments
+    (every role hiccuped), return a labelled digest rather than crashing or emitting an
+    empty brief — a /brief request must always get *something* cited back."""
+    try:
+        state = run_deliberation(query, evidence, backend)
+        result = _assemble(query, evidence, state, backend.name)
+    except Exception as exc:
+        log.warning("deliberation_failed_using_digest", error=str(exc))
+        return extractive_brief(query, evidence)
+    if not result.key_judgments:
+        log.warning("deliberation_empty_using_digest", backend=backend.name)
+        return extractive_brief(query, evidence)
+    return result
+
+
 def generate_brief(
     query: str,
     *,
@@ -328,20 +397,11 @@ def generate_brief(
             # instead of running it through the multi-agent panel it wasn't trained for.
             result = oneshot_brief(query, evidence, resolved)
         else:
-            state = run_deliberation(query, evidence, resolved)
-            result = _assemble(query, evidence, state, resolved.name)
+            result = _deliberate_or_digest(query, evidence, resolved)
+    result.evidence = evidence
 
     if persist and session is not None:
-        session.add(
-            Brief(
-                query=result.query,
-                body=result.body,
-                key_judgments=result.key_judgments or None,
-                citations=result.citations or None,
-                confidence=result.confidence,
-                backend=result.backend,
-            )
-        )
+        session.add(to_brief_row(result))
     log.info(
         "brief_generated",
         backend=result.backend,
