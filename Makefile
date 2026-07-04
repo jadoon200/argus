@@ -51,6 +51,11 @@ narratives:
 brief:
 	python -m argus.agent.analyst "$(Q)"
 
+# Closing-the-loop collection: brief -> gaps -> targeted queries -> ingest -> re-brief.
+#   make collect-loop Q="What is driving tensions in the South China Sea?"
+collect-loop:
+	python -m argus.collection.loop "$(Q)"
+
 # The optimized single-shot brief via the DSPy-compiled program (run `make optimize`
 # first; needs the `optimize` extra). Same as `ARGUS_BRIEF_MODE=dspy make brief`.
 brief-dspy:
