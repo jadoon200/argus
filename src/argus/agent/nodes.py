@@ -176,20 +176,25 @@ def render_finding(finding: Finding) -> str:
     return body
 
 
-def adjudicate(state: DeliberationState, backend: LLMBackend) -> DeliberationState:
+def adjudicator_prompt(state: DeliberationState) -> str:
+    """The adjudicator's user message — reused by the assurance resampler (self-consistency)."""
     struct_critiques = state.get("critiques_struct", [])
     critiques = (
         _render_critiques(struct_critiques)
         if struct_critiques
         else "\n\n".join(state.get("critiques", [])) or "(none)"
     )
-    user = (
+    return (
         f"QUESTION: {state['query']}\n\nEVIDENCE:\n{_evidence_block(state)}\n\n"
         f"HYPOTHESES:\n{_hypotheses_block(state)}\n\n"
         f"ACH RANKING (least-disconfirmed first):\n{_ranking_block(state)}\n\n"
         f"ANALYST'S ASSESSMENT:\n{state.get('analyst', '')}\n\n"
         f"RED TEAM'S CHALLENGE(S):\n{critiques}\n\nIssue the finding."
     )
+
+
+def adjudicate(state: DeliberationState, backend: LLMBackend) -> DeliberationState:
+    user = adjudicator_prompt(state)
     structured = complete_model(
         backend, ADJUDICATOR_SYSTEM, user, Finding, temperature=ADJUDICATOR_TEMP
     )
