@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     brief_max_per_source: int = 3
     num_hypotheses: int = 3  # competing hypotheses the ACH stage generates
     debate_rounds: int = 1  # red-team challenges, each followed by an analyst rebuttal
+    # Self-consistency confidence: >1 samples the adjudicator that many times and calibrates
+    # the reported confidence from cross-sample agreement (opt-in; extra adjudicator calls).
+    assurance_samples: int = 1
+    assurance_temperature: float = 0.4
     # Brief generation path: "panel" = the multi-agent ACH deliberation (default);
     # "dspy" = the optimized single-shot DSPy program (the `optimize` extra; falls back to
     # an unoptimized program if `make optimize` hasn't produced data/dspy/); "student" =
