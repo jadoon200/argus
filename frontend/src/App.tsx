@@ -1,8 +1,21 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { api } from "./api";
 import { Workbench } from "./views/Workbench";
 import { Narratives } from "./views/Narratives";
 import { Collection } from "./views/Collection";
+
+function EngineStatus() {
+  const { data, isError } = useQuery({ queryKey: ["model"], queryFn: api.model, staleTime: 30_000 });
+  if (isError) return <span className="statusbar"><span className="live off" />API offline</span>;
+  if (!data) return <span className="statusbar"><span className="live" style={{ opacity: 0.4 }} />connecting…</span>;
+  return (
+    <span className="statusbar" title={`configured: ${data.configured}`}>
+      <span className="live" />
+      engine: {data.active}
+    </span>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
@@ -36,6 +49,7 @@ export default function App() {
             <h1>ARGUS</h1>
           </div>
           <p className="tagline">All-source analyst workbench — open-source evidence, rated and cited.</p>
+          <div style={{ marginTop: 10 }}><EngineStatus /></div>
         </header>
         <nav className="tabs">
           {TABS.map((t) => (

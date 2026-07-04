@@ -294,6 +294,35 @@ def oneshot_brief(query: str, evidence: list[EvidenceItem], backend: LLMBackend)
     )
 
 
+def to_brief_row(result: BriefResult) -> Brief:
+    """Map a BriefResult onto a persistable Brief row — the FULL structured product
+    (tradecraft sections included), so the dashboard never has to re-parse the body."""
+    return Brief(
+        query=result.query,
+        body=result.body,
+        key_judgments=result.key_judgments or None,
+        citations=result.citations or None,
+        confidence=result.confidence,
+        key_assumptions=result.key_assumptions or None,
+        indicators=result.indicators or None,
+        hypotheses=result.hypotheses or None,
+        ach_ranking=[
+            {
+                "hypothesis": h.hypothesis,
+                "inconsistency": h.inconsistency,
+                "consistent": h.consistent,
+                "inconsistent": h.inconsistent,
+            }
+            for h in result.ach_ranking
+        ]
+        or None,
+        alternatives=result.alternatives,
+        gaps=result.gaps,
+        critique_response=result.critique_response,
+        backend=result.backend,
+    )
+
+
 def generate_brief(
     query: str,
     *,
@@ -333,16 +362,7 @@ def generate_brief(
     result.evidence = evidence
 
     if persist and session is not None:
-        session.add(
-            Brief(
-                query=result.query,
-                body=result.body,
-                key_judgments=result.key_judgments or None,
-                citations=result.citations or None,
-                confidence=result.confidence,
-                backend=result.backend,
-            )
-        )
+        session.add(to_brief_row(result))
     log.info(
         "brief_generated",
         backend=result.backend,

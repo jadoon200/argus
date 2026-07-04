@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from argus import __version__
-from argus.agent.analyst import gather_evidence, generate_brief
+from argus.agent.analyst import gather_evidence, generate_brief, to_brief_row
 from argus.agent.llm import ollama_models, resolve_backend
 from argus.agent.state import EvidenceItem
 from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
@@ -121,6 +121,13 @@ class EvidenceOut(BaseModel):
     url: str | None
 
 
+class AchScoreOut(BaseModel):
+    hypothesis: str
+    inconsistency: float  # reliability-weighted disconfirming evidence (lower = stronger)
+    consistent: int
+    inconsistent: int
+
+
 class BriefOut(BaseModel):
     brief_id: int
     query: str
@@ -128,6 +135,14 @@ class BriefOut(BaseModel):
     backend: str | None
     key_judgments: list[str]
     citations: list[str]
+    # Structured Analytic Technique sections — the full intelligence product.
+    key_assumptions: list[str] = []
+    indicators: list[str] = []
+    hypotheses: list[str] = []
+    ach_ranking: list[AchScoreOut] = []
+    alternatives: str | None = None
+    gaps: str | None = None
+    critique_response: str | None = None
     # The cited evidence items with their Admiralty ratings (incl. cyber-fusion items),
     # in citation order. Populated on a fresh POST /brief; [] for persisted listings.
     evidence: list[EvidenceOut] = []
@@ -262,6 +277,13 @@ def _brief_out(b: Brief, evidence: list[EvidenceOut] | None = None) -> BriefOut:
         backend=b.backend,
         key_judgments=b.key_judgments or [],
         citations=b.citations or [],
+        key_assumptions=b.key_assumptions or [],
+        indicators=b.indicators or [],
+        hypotheses=b.hypotheses or [],
+        ach_ranking=[AchScoreOut(**row) for row in (b.ach_ranking or [])],
+        alternatives=b.alternatives,
+        gaps=b.gaps,
+        critique_response=b.critique_response,
         evidence=evidence or [],
         body=b.body,
         created_at=b.created_at.isoformat() if b.created_at else None,
@@ -313,14 +335,7 @@ def create_brief(
     except SlotUnavailable as exc:
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
 
-    row = Brief(
-        query=result.query,
-        body=result.body,
-        confidence=result.confidence,
-        backend=result.backend,
-        key_judgments=result.key_judgments or None,
-        citations=result.citations or None,
-    )
+    row = to_brief_row(result)
     db.add(row)
     db.commit()
     db.refresh(row)

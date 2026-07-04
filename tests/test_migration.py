@@ -16,7 +16,14 @@ from sqlalchemy import Engine, create_engine, inspect
 from argus.db import models  # noqa: F401  (register tables on Base.metadata)
 from argus.db.base import Base
 
-_MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "versions" / "0001_initial.py"
+_VERSIONS_DIR = Path(__file__).resolve().parent.parent / "migrations" / "versions"
+
+
+def _migration_files() -> list[Path]:
+    """Every migration, in filename order (the 000N_ prefix is the chain order)."""
+    files = sorted(p for p in _VERSIONS_DIR.glob("*.py") if not p.name.startswith("__"))
+    assert files, "no migrations found"
+    return files
 
 
 def _schema(engine: Engine) -> dict[str, dict[str, bool]]:
@@ -29,23 +36,24 @@ def _schema(engine: Engine) -> dict[str, dict[str, bool]]:
     }
 
 
-def _run_migration(url: str) -> None:
+def _run_migrations(url: str) -> None:
     engine = create_engine(url)
-    spec = importlib.util.spec_from_file_location("mig0001", _MIGRATION)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     with engine.connect() as conn:
         ctx = MigrationContext.configure(conn)
-        with Operations.context(ctx):  # binds the global `op` the migration uses
-            module.upgrade()
+        with Operations.context(ctx):  # binds the global `op` the migrations use
+            for path in _migration_files():
+                spec = importlib.util.spec_from_file_location(f"mig_{path.stem}", path)
+                assert spec is not None and spec.loader is not None
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                module.upgrade()
         conn.commit()
 
 
 def test_migration_schema_matches_models(tmp_path: Path) -> None:
     # File-based SQLite so the schema survives across connections (in-memory would not).
     migration_url = f"sqlite:///{tmp_path / 'migration.db'}"
-    _run_migration(migration_url)
+    _run_migrations(migration_url)
     migration_schema = _schema(create_engine(migration_url))
 
     model_url = f"sqlite:///{tmp_path / 'models.db'}"
