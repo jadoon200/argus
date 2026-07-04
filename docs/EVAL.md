@@ -92,15 +92,15 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
 | Query | recall@k | MRR | confidence | cite-coverage | citations | fabricated |
 |---|---|---|---|---|---|---|
 | What is happening at the disputed reef? | 1.00 | 1.00 | moderate | 1.00 | 3 | 3 |
-| Was the nationwide power outage caused by  | 1.00 | 1.00 | low | 1.00 | 1 | 1 |
-| What did the central bank decide on intere | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
+| Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 3 | 0 |
+| What did the central bank decide on intere | 1.00 | 1.00 | moderate | 1.00 | 1 | 0 |
 
 - **mean recall@3**: 1.00
 - **mean MRR**: 1.00
 - **mean citation coverage**: 1.00
-- **fabrication attempts caught (dropped)**: 4
-- **calibration trap breaches**: 0 (brief exceeded the confidence a single low-reliability source warrants)
-- **mean faithfulness (grounded claims, LLM-judge)**: 1.00
+- **fabrication attempts caught (dropped)**: 3
+- **calibration trap breaches**: 1 (brief exceeded the confidence a single low-reliability source warrants)
+- **mean faithfulness (grounded claims, LLM-judge)**: 0.67
 - **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.67
 <!-- /AUTOGEN:eval-results -->
 
@@ -123,6 +123,22 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
   confidence varied low↔moderate across runs). The numbers in this table are illustrative of a
   representative run; the machine-recorded **AUTOGEN block above** is the authoritative result
   (model stochasticity between runs can cause small variations in per-query counts).
+
+**Recorded negatives (latest AUTOGEN run, kept honestly):**
+
+- **Citation-precision change did not move the metric.** Tightening the adjudicator prompt to
+  cite only *directly* supporting items was aimed at the LLM-judge citation-support score, but
+  that score is **0.67 both before and after** the change on this 3-query set — no measurable
+  improvement. The set is too small and too stochastic to detect a real effect; a larger gold
+  set is the prerequisite for a clean read, so the change ships as sound tradecraft, not as a
+  demonstrated gain.
+- **A timed-out deliberation step degrades calibration.** In this run the red-team `Critiques`
+  step **timed out** on the power-outage (trap) query, so the analyst was never challenged and
+  the graceful-degradation path returned a less-calibrated digest — the query breached the
+  calibration trap (**moderate ⚠️OVER** instead of *low*) and mean faithfulness fell to 0.67.
+  The brief still returned (no crash — resilience working as designed), but a degraded panel is
+  a weaker analyst: the trap-held result depends on the full debate completing, not on any
+  single run's numbers.
 
 **Distilled student (one-shot, MLX LoRA `Qwen2.5-3B-Instruct-4bit` + adapter)** — measured
 through the same harness in `student` mode, against the same base model with **no** adapter:
