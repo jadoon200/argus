@@ -97,6 +97,7 @@ class EventOut(BaseModel):
     occurred: str | None
     doc_count: int
     source_count: int
+    divergence: float | None = None  # framing divergence [0,1] — contested-event signal
 
 
 class NarrativeOut(BaseModel):
@@ -218,22 +219,42 @@ def documents(limit: int = 50, db: Session = Depends(get_db)) -> list[DocumentOu
     ]
 
 
+def _event_out(e: Event) -> EventOut:
+    return EventOut(
+        event_id=e.event_id,
+        title=e.title,
+        occurred=e.occurred.isoformat() if e.occurred else None,
+        doc_count=e.doc_count,
+        source_count=e.source_count,
+        divergence=e.divergence,
+    )
+
+
 @app.get("/events", response_model=list[EventOut])
 def events(limit: int = 50, db: Session = Depends(get_db)) -> list[EventOut]:
     limit = max(1, min(limit, 200))
     rows = db.scalars(
         select(Event).order_by(Event.source_count.desc(), Event.doc_count.desc()).limit(limit)
     ).all()
-    return [
-        EventOut(
-            event_id=e.event_id,
-            title=e.title,
-            occurred=e.occurred.isoformat() if e.occurred else None,
-            doc_count=e.doc_count,
-            source_count=e.source_count,
+    return [_event_out(e) for e in rows]
+
+
+@app.get("/contested", response_model=list[EventOut])
+def contested(limit: int = 50, db: Session = Depends(get_db)) -> list[EventOut]:
+    """Events whose sources DISAGREE in framing (divergence >= threshold), most-contested
+    first — the inverse of narrative coordination. A human-review signal: contradictions
+    are where deception, error, or a developing situation surface."""
+    limit = max(1, min(limit, 200))
+    rows = db.scalars(
+        select(Event)
+        .where(
+            Event.source_count >= 2,
+            Event.divergence >= settings.contested_threshold,
         )
-        for e in rows
-    ]
+        .order_by(Event.divergence.desc())
+        .limit(limit)
+    ).all()
+    return [_event_out(e) for e in rows]
 
 
 @app.get("/narratives", response_model=list[NarrativeOut])

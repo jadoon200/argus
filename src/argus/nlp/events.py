@@ -81,6 +81,8 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
     Rebuilt from scratch each run (events are a derived view). Also writes each
     document's Admiralty credibility from its cluster's distinct-source count.
     """
+    from argus.nlp.contest import framing_divergence  # local: contest imports events._normalize
+
     docs = list(session.scalars(select(Document).where(Document.embedding.is_not(None))).all())
     if not docs:
         return 0
@@ -98,6 +100,8 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
         published = [d.published for d in member_docs if d.published]
         representative = member_docs[0]
         event_id = _event_id(doc_ids)
+        # Contested-event signal: how divergently the member sources frame the same event.
+        divergence = framing_divergence(embeddings[member_idx]) if len(member_idx) > 1 else 0.0
         session.add(
             Event(
                 event_id=event_id,
@@ -106,6 +110,7 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
                 occurred=min(published) if published else None,
                 doc_count=len(doc_ids),
                 source_count=len(sources),
+                divergence=divergence,
             )
         )
         credibility = credibility_from_corroboration(len(sources))

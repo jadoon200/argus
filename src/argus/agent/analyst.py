@@ -360,6 +360,17 @@ def _deliberate_or_digest(
     if not result.key_judgments:
         log.warning("deliberation_empty_using_digest", backend=backend.name)
         return extractive_brief(query, evidence)
+
+    settings = get_settings()
+    if settings.assurance_samples > 1:  # self-consistency: calibrate confidence by agreement
+        from argus.agent.assurance import assured_confidence
+
+        confidence, agreement = assured_confidence(
+            state, backend, settings.assurance_samples, settings.assurance_temperature
+        )
+        result.confidence = confidence
+        result.confidence_agreement = agreement
+        log.info("assured_confidence", confidence=confidence, agreement=agreement)
     return result
 
 

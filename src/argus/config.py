@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     narrative_threshold: float = 0.6
     # Coordination: window (hours) within which synchronized publishing looks coordinated.
     coordination_window_hours: float = 6.0
+    # Contested-event signal: an event is "contested" when its member sources' framing
+    # divergence (1 - min pairwise cosine) is at least this. See nlp/contest.py.
+    contested_threshold: float = 0.30
 
     # --- Analyst agent (Layer 3) ------------------------------------------------------
     # auto -> local Ollama if reachable, else the deterministic template backend.
@@ -95,6 +98,10 @@ class Settings(BaseSettings):
     brief_max_per_source: int = 3
     num_hypotheses: int = 3  # competing hypotheses the ACH stage generates
     debate_rounds: int = 1  # red-team challenges, each followed by an analyst rebuttal
+    # Self-consistency confidence: >1 samples the adjudicator that many times and calibrates
+    # the reported confidence from cross-sample agreement (opt-in; extra adjudicator calls).
+    assurance_samples: int = 1
+    assurance_temperature: float = 0.4
     # Brief generation path: "panel" = the multi-agent ACH deliberation (default);
     # "dspy" = the optimized single-shot DSPy program (the `optimize` extra; falls back to
     # an unoptimized program if `make optimize` hasn't produced data/dspy/); "student" =
