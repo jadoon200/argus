@@ -52,8 +52,9 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
 - **Honest evaluation, not a demo.** The agent is *measured*: retrieval recall, **citation
   accuracy** (does each cited source actually exist and support the claim?), **faithfulness**
   (no ungrounded claims), and source-reliability calibration — with recorded **negatives**
-  where it fails. This eval harness is the point; a RAG demo that nobody graded isn't an
-  intelligence tool. See [`docs/EVAL.md`](docs/EVAL.md).
+  where it fails. **Faithfulness and citation-support metrics are now measured** via an
+  LLM-as-judge (free/local Ollama). This eval harness is the point; a RAG demo that nobody
+  graded isn't an intelligence tool. See [`docs/EVAL.md`](docs/EVAL.md).
 - **Zero-cost, runs offline.** Free data sources and free/local models only. The LLM layer is
   **pluggable**: local Ollama (`auto` mode; recommended: `qwen2.5:14b`) by default, a
   deterministic extractive fallback when Ollama is unreachable, and Claude (Anthropic API)

@@ -24,8 +24,6 @@ frontend/dist/
 .DS_Store
 .idea/
 .vscode/
-.claude/
-CLAUDE.md
 
 # Local agent/editor config — keep OUT of the repo (local copies are fine)
 .claude/

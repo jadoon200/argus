@@ -78,8 +78,9 @@ Three ways to produce a brief, each measured on the same harness:
 ## Evaluation
 
 Full methodology and results in [`docs/EVAL.md`](EVAL.md): retrieval recall, **citation
-accuracy** (resolvable + supporting), faithfulness/groundedness, source-reliability calibration,
-and cross-backend parity — with recorded negatives. Headline numbers: **TBD**.
+accuracy** (resolvable + supporting via LLM-as-judge), **faithfulness/groundedness** (now
+measured), source-reliability calibration, and cross-backend parity — with recorded negatives.
+Latest recorded run (qwen2.5:14b): mean faithfulness 1.00, mean citation support 0.67.
 
 ## Limitations & failure modes (committed up front)
 

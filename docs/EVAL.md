@@ -25,6 +25,9 @@ Every claim in a brief carries a citation `[doc_id]`. We check, per cited claim:
   failure mode, so this is **enforced in code, not just measured**: every citation resolves
   through `_resolve_citations`/`_resolve_label` and anything unresolvable is dropped (and the
   attempt counted). The eval's "fabrication attempts caught" number is the audit of that.
+  Free-text citation parsing now stricter: a bare number inside prose (e.g. `[2 vessels]`)
+  resolves as a label only in a *pure* citation list (every token is a label/number/doc-id);
+  otherwise it cites nothing.
 - **Supporting** — does the cited item actually support the claim? Implemented as an
   **LLM-as-judge** (`argus/eval/judge.py`): a strict judge reads each key judgment against the
   evidence and returns a structured `{grounded, supported}` verdict. Free/local (the same
@@ -117,7 +120,9 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
   caught, never shown).
 - Caveats: the fixture corpus is small and lexically clean, so recall=1.00 is a regression
   guard, not a hard retrieval test; and the model is mildly stochastic (the central-bank
-  confidence varied low↔moderate across runs).
+  confidence varied low↔moderate across runs). The numbers in this table are illustrative of a
+  representative run; the machine-recorded **AUTOGEN block above** is the authoritative result
+  (model stochasticity between runs can cause small variations in per-query counts).
 
 **Distilled student (one-shot, MLX LoRA `Qwen2.5-3B-Instruct-4bit` + adapter)** — measured
 through the same harness in `student` mode, against the same base model with **no** adapter:
