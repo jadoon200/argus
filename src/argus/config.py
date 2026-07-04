@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     narrative_threshold: float = 0.6
     # Coordination: window (hours) within which synchronized publishing looks coordinated.
     coordination_window_hours: float = 6.0
+    # Contested-event signal: an event is "contested" when its member sources' framing
+    # divergence (1 - min pairwise cosine) is at least this. See nlp/contest.py.
+    contested_threshold: float = 0.30
 
     # --- Analyst agent (Layer 3) ------------------------------------------------------
     # auto -> local Ollama if reachable, else the deterministic template backend.
