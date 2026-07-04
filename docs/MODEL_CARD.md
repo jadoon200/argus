@@ -91,8 +91,13 @@ accuracy** (resolvable + supporting via LLM-as-judge), **faithfulness/groundedne
 measured), source-reliability calibration, and cross-backend parity — with recorded negatives.
 **Citation precision** is now tightened via adjudicator prompt instruction: cite an item ONLY
 if it *directly* supports the specific judgment, not tangential or topic-adjacent citations
-(targets the LLM-as-judge "citation support" metric). Latest recorded run (qwen2.5:14b):
-mean faithfulness 1.00, mean citation support 0.67.
+(targets the LLM-as-judge "citation support" metric). **Measured effect: none yet** — citation
+support is 0.67 both before and after the change on the 3-query set, a recorded negative; the
+set is too small/stochastic to detect a real effect, so it ships as sound tradecraft, not a
+demonstrated gain (see the recorded negatives in [`docs/EVAL.md`](EVAL.md)). Across runs the
+LLM-path numbers swing (mean faithfulness 0.67-1.00, citation support ~0.67), and a timed-out
+deliberation step can degrade calibration on a given query — reported honestly rather than to
+the best run.
 
 ## Limitations & failure modes (committed up front)
 
