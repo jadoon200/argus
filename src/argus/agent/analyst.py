@@ -344,6 +344,25 @@ def to_brief_row(result: BriefResult) -> Brief:
     )
 
 
+def _deliberate_or_digest(
+    query: str, evidence: list[EvidenceItem], backend: LLMBackend
+) -> BriefResult:
+    """Run the multi-agent panel, with the deterministic digest as a hard backstop: if the
+    deliberation raises (an unrecoverable backend/graph failure) or yields no key judgments
+    (every role hiccuped), return a labelled digest rather than crashing or emitting an
+    empty brief — a /brief request must always get *something* cited back."""
+    try:
+        state = run_deliberation(query, evidence, backend)
+        result = _assemble(query, evidence, state, backend.name)
+    except Exception as exc:
+        log.warning("deliberation_failed_using_digest", error=str(exc))
+        return extractive_brief(query, evidence)
+    if not result.key_judgments:
+        log.warning("deliberation_empty_using_digest", backend=backend.name)
+        return extractive_brief(query, evidence)
+    return result
+
+
 def generate_brief(
     query: str,
     *,
@@ -378,8 +397,7 @@ def generate_brief(
             # instead of running it through the multi-agent panel it wasn't trained for.
             result = oneshot_brief(query, evidence, resolved)
         else:
-            state = run_deliberation(query, evidence, resolved)
-            result = _assemble(query, evidence, state, resolved.name)
+            result = _deliberate_or_digest(query, evidence, resolved)
     result.evidence = evidence
 
     if persist and session is not None:

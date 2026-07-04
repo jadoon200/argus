@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None  # a local server usually ignores this
     openai_model: str = "local-model"
     # Agents deliberate (multiple LLM calls); give them room rather than racing them.
-    llm_timeout_seconds: float = 180.0
+    llm_timeout_seconds: float = 300.0  # a 14B doing structured output can be slow; don't race it
     brief_context_docs: int = 12  # documents of evidence handed to the agents per query
     # Source diversity: cap how many evidence items any single source contributes to a
     # brief, so one prolific outlet can't dominate the agents' evidence (on-theme with the

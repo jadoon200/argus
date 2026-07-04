@@ -246,6 +246,30 @@ def test_generate_brief_student_mode_one_shots(monkeypatch: pytest.MonkeyPatch) 
     assert result.citations == ["reuters.com:1"]
 
 
+def test_deliberation_backend_timeout_degrades_to_digest() -> None:
+    import httpx
+
+    class TimingOutBackend:
+        """Every call raises a timeout — the deliberation must not crash; it degrades
+        to the labelled deterministic digest instead of 500-ing a /brief request."""
+
+        name = "flaky"
+
+        def complete(
+            self,
+            system: str,
+            user: str,
+            response_schema: dict[str, Any] | None = None,
+            temperature: float | None = None,
+        ) -> str:
+            raise httpx.ReadTimeout("timed out")
+
+    result = generate_brief("q?", evidence=_EVIDENCE, backend=TimingOutBackend(), persist=False)
+    assert result.backend == "template"  # fell back to the digest
+    assert result.citations  # still returns a cited product
+    assert result.gaps and "deterministic fallback" in result.gaps
+
+
 def test_citation_resolution_rejects_prose_numbers() -> None:
     from argus.agent.analyst import _resolve_citations
 
