@@ -39,11 +39,15 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
    local Ollama model (Claude optional, never required), with a deterministic fallback so it
    always runs.
-4. **Watches narratives** — clusters the reporting into narratives and flags
-   **coordination** (suspiciously synchronized pushing of the same message), the
-   information-defence half of the picture — surfaced at `GET /narratives` (most-coordinated
-   first), as a human-review signal, never an automated verdict.
-5. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
+4. **Watches narratives and detects contested events** — clusters reporting into narratives and
+   flags **coordination** (synchronized messaging), information-defence signal (surfaced at
+   `GET /narratives`). Also detects **contested-event framing divergence** across sources,
+   especially across reliability tiers, surfacing contradictions at `GET /contested` — both
+   human-review signals, never automated verdicts.
+5. **Closes the loop on collection** — a brief ends with gaps; the agent tasks the next
+   collection by converting gaps into targeted open-source queries, ingests the results, and
+   re-briefs on the expanded corpus (`make collect-loop`).
+6. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
    (`ARGUS_SENTINEL_API_URL`), pulls cyber campaigns in as citable evidence so one brief reasons
    across open-source *and* cyber reporting (read-only; off by default).
 
@@ -53,8 +57,11 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
   accuracy** (does each cited source actually exist and support the claim?), **faithfulness**
   (no ungrounded claims), and source-reliability calibration — with recorded **negatives**
   where it fails. **Faithfulness and citation-support metrics are now measured** via an
-  LLM-as-judge (free/local Ollama). This eval harness is the point; a RAG demo that nobody
-  graded isn't an intelligence tool. See [`docs/EVAL.md`](docs/EVAL.md).
+  LLM-as-judge (free/local Ollama). **Confidence is self-consistently calibrated** (opt-in high-assurance
+  mode via `ARGUS_ASSURANCE_SAMPLES`): the adjudicator is sampled K times and confidence is
+  downgraded if the samples don't mostly agree, honest calibration over a lucky single draw.
+  This eval harness is the point; a RAG demo that nobody graded isn't an intelligence tool.
+  See [`docs/EVAL.md`](docs/EVAL.md).
 - **Zero-cost, runs offline.** Free data sources and free/local models only. The LLM layer is
   **pluggable**: local Ollama (`auto` mode; recommended: `qwen2.5:14b`) by default, a
   deterministic extractive fallback when Ollama is unreachable, and Claude (Anthropic API)

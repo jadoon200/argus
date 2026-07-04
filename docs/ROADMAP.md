@@ -24,6 +24,16 @@ agent personas (Key Assumptions Check + Indicators & Warnings), **DSPy** prompt 
 (`make optimize`, `src/argus/optimize/`), free **MLX** + OpenAI-compatible LLM backends, and
 **MLX LoRA self-distillation** (`make finetune`, `src/argus/finetune/`, see `docs/FINETUNE.md`).
 
+**Post-MVP innovations** (landed after milestones 0–7): **contested-event detection**
+(`src/argus/nlp/contest.py`, `/contested` endpoint) — measures framing divergence across sources
+within events, especially across reliability tiers; deterministic, no LLM. **Self-consistency
+confidence calibration** (`ARGUS_ASSURANCE_SAMPLES`, `src/argus/agent/assurance.py`) — samples
+the adjudicator K times and derives confidence from agreement, honest calibration over a lucky draw.
+**Citation precision** — adjudicator prompt tightened to cite only *directly* supporting items,
+targeting LLM-judge citation-support. **Closing-the-loop collection** (`make collect-loop`,
+`src/argus/collection/{tasking,loop}.py`) — turns a brief's intelligence gaps into the next search
+queries, ingests + enriches, then re-briefs on the expanded corpus.
+
 **Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
 story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the
 deferred live deployment (9) — neither imminent.

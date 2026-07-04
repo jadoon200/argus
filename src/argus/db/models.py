@@ -113,6 +113,9 @@ class Event(Base):
     occurred: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     doc_count: Mapped[int] = mapped_column(Integer(), default=0)
     source_count: Mapped[int] = mapped_column(Integer(), default=0)
+    # Framing divergence in [0,1] — how differently the member sources frame the same
+    # event (contested-event signal, the inverse of narrative coordination). See nlp/contest.py.
+    divergence: Mapped[float | None] = mapped_column(Float())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
