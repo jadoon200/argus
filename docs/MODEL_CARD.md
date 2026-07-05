@@ -89,15 +89,20 @@ Three ways to produce a brief, each measured on the same harness:
 Full methodology and results in [`docs/EVAL.md`](EVAL.md): retrieval recall, **citation
 accuracy** (resolvable + supporting via LLM-as-judge), **faithfulness/groundedness** (now
 measured), source-reliability calibration, and cross-backend parity — with recorded negatives.
-**Citation precision** is now tightened via adjudicator prompt instruction: cite an item ONLY
-if it *directly* supports the specific judgment, not tangential or topic-adjacent citations
-(targets the LLM-as-judge "citation support" metric). **Measured effect: none yet** — citation
-support is 0.67 both before and after the change on the 3-query set, a recorded negative; the
-set is too small/stochastic to detect a real effect, so it ships as sound tradecraft, not a
-demonstrated gain (see the recorded negatives in [`docs/EVAL.md`](EVAL.md)). Across runs the
-LLM-path numbers swing (mean faithfulness 0.67-1.00, citation support ~0.67), and a timed-out
-deliberation step can degrade calibration on a given query — reported honestly rather than to
-the best run.
+The gold set was expanded from 3 to 10 queries (6 calibration/contested caps) so the metrics
+are means over many cases, not one draw. On the 10-query set (`qwen2.5:14b`): retrieval
+recall@3 1.00 over a 20-doc corpus, citation coverage 1.00, **calibration held on 5 of 6 caps**
+(the lone breach — the power-outage sabotage trap rated *moderate* instead of *low* — is
+reproducible across runs, a specific state-attributed-sabotage blind spot to fix, not noise).
+**Citation precision** was tightened via adjudicator prompt (cite an item ONLY if it *directly*
+supports the specific judgment) targeting the LLM-judge "citation support" metric; **measured
+effect: none** — that score is 0.67 (3-query) then 0.60 (10-query), no evidence of gain, so it
+ships as sound tradecraft, not a demonstrated improvement. The honest limiter is the judge
+itself: *self*-LLM-judging is too biased and noisy to certify citation quality — a deterministic
+NLI-based (claim-level entailment) scorer, with judge–human agreement measured on a labelled
+slice, is the prerequisite for a trustworthy number. Caveat: the red-team `Critiques` step timed
+out on 5/10 queries under local-model latency, so some briefs ran on a degraded panel — reported
+plainly rather than to the best run. Full record in [`docs/EVAL.md`](EVAL.md).
 
 ## Limitations & failure modes (committed up front)
 
