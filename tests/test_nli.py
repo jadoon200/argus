@@ -6,6 +6,7 @@ from argus.eval.nli import (
     EntailmentCase,
     _claim_text,
     agreement,
+    decompose,
     score_brief_nli,
 )
 
@@ -84,6 +85,48 @@ def test_entailment_gold_is_balanced() -> None:
     entailed = [c for c in ENTAILMENT_GOLD if c.entailed]
     # A useful agreement slice needs both entail and non-entail cases.
     assert 0 < len(entailed) < len(ENTAILMENT_GOLD)
+
+
+def test_decompose_splits_and_strips_hedges() -> None:
+    claims = decompose(
+        "There is likely an ongoing maritime dispute near the reef, characterized by "
+        "increased coast guard presence, and both sides are massing vessels [E1]."
+    )
+    # Multiple atomic sub-claims, the estimative hedge ("There is likely") stripped.
+    assert len(claims) >= 2
+    assert not any(c.lower().startswith("there is likely") for c in claims)
+    assert any("maritime dispute" in c for c in claims)
+
+
+def test_decompose_keeps_single_clause_whole() -> None:
+    assert decompose("Coast guard vessels were in a standoff [E1].") == [
+        "Coast guard vessels were in a standoff"
+    ]
+
+
+class ExactClaimNli:
+    """Fake that entails only the *exact* atomic fact — not the compound sentence, not the
+    unsupported inference. Models why decomposition helps: a strict scorer rejects the whole
+    analytic sentence, while the atomic fact within it is entailed."""
+
+    def __init__(self, fact: str) -> None:
+        self._fact = fact.lower()
+
+    def predict_entailment(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
+        return [1.0 if hyp.strip().lower() == self._fact else 0.0 for _, hyp in pairs]
+
+
+def test_atomic_decomposition_credits_partial_grounding() -> None:
+    # A compound judgment: one clause is the atomic fact, one is an unsupported inference.
+    evidence = [_ev("a:1", "Reef standoff", "coast guard vessels massed at the reef")]
+    scorer = ExactClaimNli("coast guard vessels massed at the reef")
+    judgment = "Coast guard vessels massed at the reef, and a direct naval war is imminent [E1]."
+    atomic = score_brief_nli([judgment], evidence, scorer, decompose_claims=True)
+    strict = score_brief_nli([judgment], evidence, scorer, decompose_claims=False)
+    # Strict: the whole compound sentence isn't the atomic fact -> 0. Atomic: 1 of 2 clauses -> 0.5.
+    assert strict.faithfulness == 0.0
+    assert atomic.faithfulness == 0.5
+    assert atomic.n == 2  # decomposed into two sub-claims
 
 
 def test_agreement_perfect_and_imperfect() -> None:

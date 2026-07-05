@@ -49,13 +49,52 @@ def _claim_text(judgment: str) -> str:
     return _MARKER.sub("", judgment).strip()
 
 
+# Clause boundaries for decomposition: sentence terminators, coordinating conjunctions, and
+# appositive commas that append a second assertion.
+_CLAUSE_SPLIT = re.compile(
+    r"[.;]\s+|,?\s+(?:and|but|while|whereas|though|although|which|characteri[sz]ed by)\s+|,\s+",
+    re.IGNORECASE,
+)
+# Estimative hedges stripped so entailment scores the factual core, not the confidence wrapper.
+_HEDGE_PREFIX = re.compile(
+    r"^(?:we assess[^,]*?that\s+|it\s+is\s+(?:likely|probable|possible|assessed|unclear)\s+that\s+"
+    r"|there\s+(?:is|are)\s+likely\s+|it\s+appears\s+that\s+|reporting\s+(?:suggests|indicates)"
+    r"\s+that\s+)",
+    re.IGNORECASE,
+)
+_HEDGE_WORD = re.compile(r"^(?:likely|probably|possibly|reportedly|allegedly|apparently)\s+", re.I)
+
+
+def decompose(judgment: str) -> list[str]:
+    """Split an analytic judgment into atomic factual sub-claims (deterministic).
+
+    A key judgment is an *assessment* that synthesises and hedges; strict NLI entailment of the
+    whole sentence scores it ~0 even when well grounded (see docs/EVAL.md). Decomposing into
+    atomic clauses — and stripping estimative hedges — lets each factual piece be entailed on its
+    own, so faithfulness becomes the *fraction of sub-claims supported* (the RAGAS shape). A
+    free/deterministic approximation of RAGAS's LLM claim-extraction: bias-free and CI-safe."""
+    text = _claim_text(judgment)
+    claims: list[str] = []
+    for part in _CLAUSE_SPLIT.split(text):
+        piece = _HEDGE_WORD.sub("", _HEDGE_PREFIX.sub("", part.strip())).strip(" ,.")
+        if len(piece.split()) >= 3:  # drop fragments too short to be a checkable claim
+            claims.append(piece)
+    return claims or ([text] if text else [])
+
+
 def score_brief_nli(
     judgments: list[str],
     evidence: list[EvidenceItem],
     scorer: NliScorer,
     threshold: float = 0.5,
+    decompose_claims: bool = True,
 ) -> JudgeScores:
-    """Grounded/supported counts by NLI entailment (deterministic; mirrors judge.JudgeScores)."""
+    """NLI entailment scoring (deterministic; mirrors judge.JudgeScores).
+
+    With `decompose_claims` (default) each judgment is split into atomic sub-claims and every
+    sub-claim scored, so faithfulness/citation-support are the RAGAS-style *fraction* of
+    sub-claims entailed (by any / by the cited evidence). With it off, the whole judgment is
+    entailed as one hypothesis — the strict variant that under-credits analytic synthesis."""
     scores = JudgeScores()
     if not evidence:
         return scores
@@ -64,23 +103,27 @@ def score_brief_nli(
     ev_texts = [_evidence_text(e) for e in evidence]
 
     for judgment in judgments:
-        claim = _claim_text(judgment)
-        if not claim:
-            continue
-        # Grounded: does ANY evidence item entail the claim?
-        probs = scorer.predict_entailment([(text, claim) for text in ev_texts])
-        grounded = any(p >= threshold for p in probs)
-        # Supported: do the SPECIFIC cited [E#] items entail it? (false if it cites nothing)
         cited = [by_label[m] for m in citation_markers(judgment) if m in by_label]
-        if cited:
-            cited_probs = scorer.predict_entailment([(_evidence_text(e), claim) for e in cited])
-            supported = any(p >= threshold for p in cited_probs)
-        else:
-            supported = False
-        scores.n += 1
-        scores.grounded += int(grounded)
-        scores.supported += int(supported)
+        cited_texts = [_evidence_text(e) for e in cited]
+        claims = decompose(judgment) if decompose_claims else [_claim_text(judgment)]
+        for claim in claims:
+            if not claim.strip():
+                continue
+            # Grounded: some evidence entails this sub-claim; supported: the CITED evidence does.
+            grounded = any(
+                p >= threshold for p in scorer.predict_entailment(_pairs(ev_texts, claim))
+            )
+            supported = bool(cited_texts) and any(
+                p >= threshold for p in scorer.predict_entailment(_pairs(cited_texts, claim))
+            )
+            scores.n += 1
+            scores.grounded += int(grounded)
+            scores.supported += int(supported)
     return scores
+
+
+def _pairs(premises: list[str], hypothesis: str) -> list[tuple[str, str]]:
+    return [(p, hypothesis) for p in premises]
 
 
 class CrossEncoderNli:
