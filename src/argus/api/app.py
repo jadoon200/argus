@@ -23,6 +23,7 @@ from argus.config import get_settings
 from argus.db.base import get_session_factory
 from argus.db.models import Brief, Document, Event, Narrative, Source
 from argus.nlp.disarm import DISARM_TECHNIQUES, default_mapper, lexical_match
+from argus.stix import to_stix_bundle
 
 settings = get_settings()
 app = FastAPI(title="ARGUS", version=__version__, description="All-source intelligence workbench")
@@ -310,6 +311,14 @@ def disarm_catalog() -> list[DisarmTechniqueOut]:
         )
         for t in DISARM_TECHNIQUES
     ]
+
+
+@app.get("/stix")
+def stix_export(db: Session = Depends(get_db)) -> dict[str, object]:
+    """STIX 2.1 bundle of the influence-ops graph — DISARM techniques (attack-pattern), tagged
+    narratives (report), and sources (identity). Ingestible by OpenCTI / MISP / the ATT&CK
+    Navigator, and joinable with SENTINEL's ATT&CK STIX in one object model. Read-only."""
+    return to_stix_bundle(db)
 
 
 @app.post("/map-disarm", response_model=list[DisarmTag])
