@@ -9,9 +9,10 @@ evaluation bar.
 
 > **Sibling to [SENTINEL](../sentinel).** Sentinel fuses the **cyber** threat picture
 > (network intrusions × ATT&CK × CTI). ARGUS fuses the **information** picture
-> (open-source reporting × entities/events × narratives) and puts an **agentic analyst**
-> on top. The two join: ARGUS can query Sentinel's cyber knowledge graph so one analyst
-> reasons across both — the way an all-source fusion cell actually works.
+> (open-source reporting × entities/events × narratives × DISARM influence tactics)
+> and puts an **agentic analyst** on top. The two join: ARGUS can query Sentinel's cyber
+> knowledge graph so one analyst reasons across both — cyber + cognitive, the way an
+> all-source fusion cell actually works.
 
 > **Status:** agent spine, API, narrative watch, cyber-fusion bridge, and the React dashboard
 > all complete (plus DSPy prompt optimization and MLX LoRA fine-tuning).
@@ -39,11 +40,12 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
    local Ollama model (Claude optional, never required), with a deterministic fallback so it
    always runs.
-4. **Watches narratives and detects contested events** — clusters reporting into narratives and
-   flags **coordination** (synchronized messaging), information-defence signal (surfaced at
-   `GET /narratives`). Also detects **contested-event framing divergence** across sources,
-   especially across reliability tiers, surfacing contradictions at `GET /contested` — both
-   human-review signals, never automated verdicts.
+4. **Watches narratives and tags influence tactics** — clusters reporting into narratives,
+   flags **coordination** (synchronized messaging) and **influence-operations techniques**
+   (DISARM Red Framework: deepfakes, conspiracy narratives, flooding, etc.), both information-defence
+   signals (surfaced at `GET /narratives`). Also detects **contested-event framing divergence**
+   across sources, especially across reliability tiers, surfacing contradictions at `GET /contested`
+   — all human-review signals, never automated verdicts.
 5. **Closes the loop on collection** — a brief ends with gaps; the agent tasks the next
    collection by converting gaps into targeted open-source queries, ingests the results, and
    re-briefs on the expanded corpus (`make collect-loop`).
