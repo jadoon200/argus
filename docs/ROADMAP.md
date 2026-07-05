@@ -46,6 +46,10 @@ faithfulness is the RAGAS-style fraction entailed, fixing strict entailment's co
 (`src/argus/stix.py`, `GET /stix`) — serializes the DISARM-keyed influence-ops graph (DISARM techniques → `attack-pattern`,
 tagged narratives → `report`, sources → `identity`) as a conformant, deterministic STIX 2.1 bundle, ingestible by
 OpenCTI / MISP / the ATT&CK Navigator and joinable with SENTINEL's ATT&CK STIX in one object model. Dependency-free.
+**Cross-graph actor resolution** (`src/argus/actors.py`, `GET /actors`) — a curated threat-actor→nation registry
+(~16 groups + vendor aliases) that resolves a threat group named in a SENTINEL cyber campaign to its widely-reported
+nation attribution (`APT28 ⇄ Russia`), annotated onto the cyber-fusion evidence so the cyber lane joins the geopolitical
+actor of the brief; attribution shown as contested, open-reporting consensus, human-review — never an automated verdict.
 
 **Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
 story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the
