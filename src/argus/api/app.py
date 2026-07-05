@@ -443,6 +443,11 @@ def create_brief(
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
 
     row = to_brief_row(result)
+    if result.backend == "triage":
+        # Instant guidance (meta question / no relevant reporting) — returned to the chat
+        # but never persisted: /briefs lists intelligence products, not help text.
+        row.brief_id = 0
+        return _brief_out(row, [])
     db.add(row)
     db.commit()
     db.refresh(row)
