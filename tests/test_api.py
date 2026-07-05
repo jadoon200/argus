@@ -55,6 +55,18 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_stix_export(client: TestClient) -> None:
+    r = client.get("/stix")
+    assert r.status_code == 200
+    bundle = r.json()
+    assert bundle["type"] == "bundle"
+    # DISARM catalog is always exported as attack-patterns (even with no narratives seeded).
+    assert any(
+        o["type"] == "attack-pattern" and o["external_references"][0]["source_name"] == "DISARM"
+        for o in bundle["objects"]
+    )
+
+
 def test_disarm_catalog(client: TestClient) -> None:
     r = client.get("/disarm/techniques")
     assert r.status_code == 200

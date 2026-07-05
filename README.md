@@ -52,6 +52,10 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
 6. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
    (`ARGUS_SENTINEL_API_URL`), pulls cyber campaigns in as citable evidence so one brief reasons
    across open-source *and* cyber reporting (read-only; off by default).
+7. **Speaks the standard** — exports the DISARM-keyed influence-ops graph as a conformant
+   **STIX 2.1** bundle (`GET /stix`: techniques → `attack-pattern`, narratives → `report`,
+   sources → `identity`), ingestible by OpenCTI / MISP / the ATT&CK Navigator and joinable with
+   Sentinel's ATT&CK STIX in one object model — cyber + cognitive on the same standard.
 
 ## Why it's built this way
 
