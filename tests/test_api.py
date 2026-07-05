@@ -55,6 +55,24 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_meta_question_answers_instantly_and_is_not_persisted(client: TestClient) -> None:
+    r = client.post("/brief", json={"query": "what can u do"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backend"] == "triage" and body["brief_id"] == 0
+    assert "ARGUS" in body["body"]
+    # Guidance is never persisted into the intelligence-product listing.
+    assert all(b["backend"] != "triage" for b in client.get("/briefs").json())
+
+
+def test_irrelevant_query_gets_collection_guidance(client: TestClient) -> None:
+    r = client.post("/brief", json={"query": "quantum banking collapse in the metaverse"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backend"] == "triage"
+    assert "collect" in body["body"].lower() and "make ingest" in body["body"]
+
+
 def test_actors_registry(client: TestClient) -> None:
     r = client.get("/actors")
     assert r.status_code == 200
