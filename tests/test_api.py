@@ -55,6 +55,32 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_disarm_catalog(client: TestClient) -> None:
+    r = client.get("/disarm/techniques")
+    assert r.status_code == 200
+    rows = r.json()
+    assert "T0086.002" in {t["technique_id"] for t in rows}  # the deepfake technique
+    assert all(t["phase"] in {"Plan", "Prepare", "Execute", "Assess"} for t in rows)
+
+
+def test_map_disarm_degrades_to_lexical(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Force the embedding path to fail -> the endpoint must fall back to lexical, never 500
+    # (and never trigger a real model download in CI).
+    def boom() -> object:
+        raise RuntimeError("no model")
+
+    monkeypatch.setattr("argus.api.app.default_mapper", boom)
+    r = client.post(
+        "/map-disarm", json={"text": "state outlet floods the space with conspiracy narratives"}
+    )
+    assert r.status_code == 200
+    tags = r.json()
+    assert isinstance(tags, list) and tags  # lexical fallback still returns advisory tags
+    assert all({"technique_id", "name", "phase", "score"} <= set(t) for t in tags)
+
+
 def test_model_info_exposes_active_backend(client: TestClient) -> None:
     body = client.get("/model").json()
     assert body["active"] == "template"  # forced in the fixture

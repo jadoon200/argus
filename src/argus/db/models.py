@@ -143,6 +143,9 @@ class Narrative(Base):
     doc_count: Mapped[int] = mapped_column(Integer(), default=0)
     source_count: Mapped[int] = mapped_column(Integer(), default=0)
     coordination: Mapped[float | None] = mapped_column(Float())
+    # DISARM influence-ops techniques the narrative's framing resembles (advisory, human-review):
+    # list of {technique_id, name, phase, score}. See nlp/disarm.py. Symmetric to SENTINEL ATT&CK.
+    disarm: Mapped[list[dict[str, Any]] | None] = mapped_column(JsonType)
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
