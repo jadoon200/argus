@@ -9,6 +9,7 @@ share) for an analyst to review.
 
 import hashlib
 from datetime import timedelta
+from typing import Any
 
 import numpy as np
 from sqlalchemy import delete, select
@@ -20,6 +21,8 @@ from argus.db.models import Document, Narrative, NarrativeDocument, Source
 from argus.logging import configure_logging, get_logger
 from argus.narrative.cluster import cluster_narratives
 from argus.narrative.coordination import coordination_score
+from argus.nlp.disarm import DisarmMapper
+from argus.nlp.embed import Vector
 
 log = get_logger(__name__)
 
@@ -29,7 +32,30 @@ def _narrative_id(doc_ids: list[str]) -> str:
     return f"nar:{digest[:21]}"
 
 
-def rebuild_narratives(session: Session, threshold: float, min_size: int, window: timedelta) -> int:
+def _disarm_tags(
+    mapper: DisarmMapper | None, centroid: Vector, top_k: int, threshold: float
+) -> list[dict[str, Any]] | None:
+    """DISARM techniques the narrative centroid resembles ([] -> None). Never raises: a
+    tagging failure (model load, dim mismatch) must not break the whole narrative rebuild."""
+    if mapper is None:
+        return None
+    try:
+        matches = mapper.map_vector(centroid, top_k=top_k, threshold=threshold)
+    except Exception as exc:  # advisory enrichment: degrade to no tags, never break the rebuild
+        log.warning("disarm_tagging_failed", error=str(exc))
+        return None
+    return [m.as_dict() for m in matches] or None
+
+
+def rebuild_narratives(
+    session: Session,
+    threshold: float,
+    min_size: int,
+    window: timedelta,
+    mapper: DisarmMapper | None = None,
+    disarm_top_k: int = 3,
+    disarm_threshold: float = 0.28,
+) -> int:
     docs = list(session.scalars(select(Document).where(Document.embedding.is_not(None))).all())
     if not docs:
         return 0
@@ -49,6 +75,8 @@ def rebuild_narratives(session: Session, threshold: float, min_size: int, window
         coordination = coordination_score(
             times, [reliability.get(d.source, "F") for d in member_docs], window
         )
+        centroid = embeddings[member_idx].mean(axis=0)
+        disarm = _disarm_tags(mapper, centroid, disarm_top_k, disarm_threshold)
         representative = member_docs[0]
         narrative_id = _narrative_id(doc_ids)
         session.add(
@@ -59,6 +87,7 @@ def rebuild_narratives(session: Session, threshold: float, min_size: int, window
                 doc_count=len(doc_ids),
                 source_count=len({d.source for d in member_docs}),
                 coordination=coordination,
+                disarm=disarm,
                 first_seen=min(published) if published else None,
                 last_seen=max(published) if published else None,
             )
@@ -78,6 +107,9 @@ def main() -> None:
             settings.narrative_threshold,
             settings.narrative_min_cluster_size,
             timedelta(hours=settings.coordination_window_hours),
+            mapper=DisarmMapper(),  # tag each narrative with DISARM techniques (real encoder)
+            disarm_top_k=settings.disarm_top_k,
+            disarm_threshold=settings.disarm_threshold,
         )
     log.info("narratives_rebuilt", narratives=count)
 

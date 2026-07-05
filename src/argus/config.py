@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # Contested-event signal: an event is "contested" when its member sources' framing
     # divergence (1 - min pairwise cosine) is at least this. See nlp/contest.py.
     contested_threshold: float = 0.30
+    # DISARM influence-ops technique tagging (nlp/disarm.py): a narrative is tagged with a
+    # DISARM technique when the cosine of its centroid to the technique >= this, up to top_k.
+    # Advisory human-review signal only (news text vs TTP descriptions is noisy). Symmetric
+    # to SENTINEL's ATT&CK mapping so cyber TTPs and influence TTPs share one shape.
+    disarm_threshold: float = 0.28
+    disarm_top_k: int = 3
 
     # --- Analyst agent (Layer 3) ------------------------------------------------------
     # auto -> local Ollama if reachable, else the deterministic template backend.
