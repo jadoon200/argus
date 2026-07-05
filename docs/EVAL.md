@@ -91,24 +91,26 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
 
 | Query | recall@k | MRR | confidence | cite-coverage | citations | fabricated |
 |---|---|---|---|---|---|---|
-| What is happening at the disputed reef? | 1.00 | 1.00 | moderate | 1.00 | 3 | 3 |
+| What is happening at the disputed reef? | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
 | What is known about the earthquake in the  | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
-| Who won the election? | 1.00 | 1.00 | moderate | 1.00 | 2 | 0 |
+| Who won the election? | 1.00 | 1.00 | moderate | 1.00 | 2 | 2 |
 | What did the central bank decide on intere | 1.00 | 1.00 | moderate | 1.00 | 1 | 0 |
 | Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 1 | 0 |
 | Has the president fled the capital? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
 | Are armored columns massing at the border? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
 | Who fired first in the border clash? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
-| Was the grid disruption a cyberattack? | 1.00 | 1.00 | low | 1.00 | 1 | 1 |
-| How many casualties were reported in the b | 1.00 | 1.00 | low | 1.00 | 2 | 0 |
+| Was the grid disruption a cyberattack? | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
+| How many casualties were reported in the b | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
 
 - **mean recall@3**: 1.00
 - **mean MRR**: 1.00
 - **mean citation coverage**: 1.00
-- **fabrication attempts caught (dropped)**: 4
+- **fabrication attempts caught (dropped)**: 2
 - **calibration trap breaches**: 1 (brief exceeded the confidence a single low-reliability source warrants)
-- **mean faithfulness (grounded claims, LLM-judge)**: 0.70
-- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.60
+- **mean faithfulness (grounded claims, LLM-judge)**: 0.60
+- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.55
+- **mean NLI strict-entailment faithfulness (deterministic, experimental — see notes)**: 0.30
+- **mean NLI strict-entailment citation support (deterministic, experimental — see notes)**: 0.10
 <!-- /AUTOGEN:eval-results -->
 
 **LLM-path (multi-agent deliberation, structured outputs, `ollama:qwen2.5:14b`, 10-query set).**
@@ -135,12 +137,45 @@ draw. What the larger set shows:
 - **Citation precision remains unproven, and the LLM judge is the limiting instrument.** The
   adjudicator-prompt tightening aimed at the LLM-judge citation-support score; that score is
   **0.67 (3-query) then 0.60 (10-query)** — no evidence of improvement, and over 10 queries the
-  judge itself is mediocre and noisy. The honest conclusion is that *self*-LLM-judging (the
-  generator's family scoring its own briefs) is too biased and too stochastic to certify this
-  claim; a **deterministic NLI-based faithfulness/citation scorer** (claim-level entailment
-  against the cited evidence, judge–human agreement measured on a labelled slice) is the
-  prerequisite for a trustworthy number. Until then citation precision ships as sound tradecraft,
-  not a demonstrated gain.
+  judge itself is mediocre and noisy. Self-LLM-judging (the generator's family scoring its own
+  briefs) is too *stochastic* (run-to-run swing) and self-biased to certify the claim. Citation
+  precision ships as sound tradecraft, not a demonstrated gain.
+- **Judge–human agreement, now measured — and a partial negative on the NLI fix.** We built the
+  proposed deterministic, cross-family **NLI entailment scorer** (`src/argus/eval/nli.py`;
+  claim-level entailment via `cross-encoder/nli-deberta-v3-base`; opt-in `ARGUS_NLI_ENABLED`) to
+  replace the biased self-judge, and measured both judges against a hand-labelled 10-pair
+  entailment slice (`ENTAILMENT_GOLD`). Result, kept honestly:
+
+  | Judge | Agreement with human labels |
+  |---|---|
+  | NLI entailment (deterministic, cross-family) | **9/10 = 0.90** — missed one paraphrase ("certified as credible" → "found credible") |
+  | LLM judge (qwen2.5:14b, temp 0) | **10/10 = 1.00** — including every allegation-vs-fact trap |
+
+  So the NLI scorer is **not** a per-item accuracy win over the LLM judge on clean, isolated
+  cases — a base NLI model can whiff on paraphrase. The LLM judge's real weakness was never
+  accuracy on clear cases; it is *stochasticity and self-bias on full briefs*. NLI's value is
+  therefore orthogonal, not superior: it is **deterministic** (zero run-to-run variance) and
+  **cross-family** (no self-bias), so it is shipped as a stability cross-check reported beside
+  the LLM judge (`ARGUS_NLI_ENABLED=1 make eval`), not as a replacement. A larger labelled slice
+  and a stronger NLI model (or a judge ensemble) would sharpen this; the 10-pair result is a
+  one-item margin and is stated as such.
+- **Bigger negative: strict entailment is the wrong bar for *analytic* judgments.** On the
+  full 10-query briefs, the NLI strict-entailment scores collapse — **faithfulness 0.30,
+  citation support 0.10** (AUTOGEN block above) — far below both the LLM judge (0.60 / 0.55)
+  and NLI's own 0.90 on the atomic slice. This is **not** a bug (citations resolve correctly as
+  `E#`; verified) and **not** a sign the briefs are unfaithful. It is the scorer: a real key
+  judgment is an *assessment* that synthesizes, hedges and infers beyond any one evidence line,
+  and strict NLI entailment (the hypothesis must be *necessarily* true given the premise) marks
+  those "neutral", not "entailed". Concretely, the reef judgment — *"There is likely an ongoing
+  maritime territorial dispute… a show of force rather than immediate intent for direct
+  confrontation [E1][E2][E3]"* — scored **0.00 entailment against all three** corroborating
+  sources, though it is a sound synthesis a human and the LLM judge both credit. So
+  whole-judgment NLI entailment is **not a valid faithfulness metric for intelligence writing**;
+  the numbers are labelled *experimental* and measure the scorer's strictness, not brief
+  quality. The fix is **atomic claim decomposition** (split each judgment into atomic factual
+  sub-claims and entail each — the full RAGAS pipeline) before the entailment check is applied;
+  that is the recorded next step. The NLI scorer stays useful where claims are atomic (0.90 on
+  the slice); on compound assessments it needs decomposition first.
 - **The multi-agent panel is fragile under local-model latency.** In this run the red-team
   `Critiques` structured step **timed out on 5 of the 10 queries** (qwen too slow on that JSON
   schema within the 300s budget), so several briefs ran on a degraded (unchallenged) panel. The
