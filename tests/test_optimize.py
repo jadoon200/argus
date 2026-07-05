@@ -34,8 +34,10 @@ def test_metric_zeroed_when_overconfident() -> None:
 
 
 def test_build_trainset_labels_evidence() -> None:
+    from argus.eval.goldset import QUERIES
+
     examples = build_trainset()
-    assert len(examples) == 3
+    assert len(examples) == len(QUERIES)
     for ex in examples:
         assert ex.question
         assert "[E1]" in ex.evidence  # evidence rendered with citation labels
