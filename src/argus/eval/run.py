@@ -15,6 +15,7 @@ from pathlib import Path
 from argus.agent.analyst import generate_brief
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.state import evidence_labels
+from argus.config import get_settings
 from argus.eval.goldset import QUERIES, corpus_retrieved, evidence_by_id
 from argus.eval.judge import judge_brief
 from argus.eval.metrics import (
@@ -24,6 +25,7 @@ from argus.eval.metrics import (
     recall_at_k,
     reciprocal_rank,
 )
+from argus.eval.nli import NliScorer, agreement, load_nli_scorer, score_brief_nli
 from argus.logging import configure_logging, get_logger
 from argus.nlp.retrieval import hybrid_search
 
@@ -45,10 +47,20 @@ class QueryReport:
     # Reading-dependent (LLM-judge) metrics — None on the deterministic/template path.
     faithfulness: float | None = None
     citation_support: float | None = None
+    # Deterministic, cross-family NLI metrics — None unless an NLI scorer is enabled.
+    nli_faithfulness: float | None = None
+    nli_citation_support: float | None = None
 
 
-def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
-    """Score the gold set. `backend=None` forces the deterministic template digest."""
+def evaluate(
+    backend: LLMBackend | None,
+    nli_scorer: NliScorer | None = None,
+    nli_threshold: float = 0.5,
+) -> list[QueryReport]:
+    """Score the gold set. `backend=None` forces the deterministic template digest.
+
+    An optional `nli_scorer` adds deterministic, cross-family faithfulness/citation numbers
+    alongside the (stochastic, self-biased) LLM judge — the two are reported side by side."""
     corpus = corpus_retrieved()
     by_id = evidence_by_id()
     reports: list[QueryReport] = []
@@ -68,6 +80,12 @@ def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
             if judged.n:
                 faithfulness, citation_support = judged.faithfulness, judged.citation_support
 
+        nli_faithfulness = nli_citation_support = None
+        if nli_scorer is not None and brief.key_judgments:  # deterministic NLI, when enabled
+            nli = score_brief_nli(brief.key_judgments, evidence, nli_scorer, nli_threshold)
+            if nli.n:
+                nli_faithfulness, nli_citation_support = nli.faithfulness, nli.citation_support
+
         reports.append(
             QueryReport(
                 query=gold.query,
@@ -80,6 +98,8 @@ def evaluate(backend: LLMBackend | None) -> list[QueryReport]:
                 over_confident=exceeds_confidence(brief.confidence, gold.max_confidence),
                 faithfulness=faithfulness,
                 citation_support=citation_support,
+                nli_faithfulness=nli_faithfulness,
+                nli_citation_support=nli_citation_support,
             )
         )
     return reports
@@ -118,6 +138,15 @@ def _results_table(reports: list[QueryReport]) -> list[str]:
             f"{_mean([r.faithfulness for r in judged if r.faithfulness is not None]):.2f}",
             f"- **mean citation support (cited evidence backs the claim, LLM-judge)**: "
             f"{_mean(support):.2f}",
+        ]
+    nli = [r for r in reports if r.nli_faithfulness is not None]
+    if nli:  # deterministic, cross-family — no self-judging bias, no run-to-run swing
+        nli_support = [r.nli_citation_support for r in nli if r.nli_citation_support is not None]
+        lines += [
+            f"- **mean faithfulness (NLI entailment, deterministic)**: "
+            f"{_mean([r.nli_faithfulness for r in nli if r.nli_faithfulness is not None]):.2f}",
+            f"- **mean citation support (NLI entailment, deterministic)**: "
+            f"{_mean(nli_support):.2f}",
         ]
     return lines
 
@@ -162,8 +191,13 @@ def update_eval_doc(block: str, doc: Path = EVAL_DOC) -> bool:
 
 def main() -> None:
     configure_logging()
+    settings = get_settings()
     backend = resolve_backend()
-    reports = evaluate(backend)
+    # NLI scoring is opt-in (the model downloads on first use), so CI never pulls it.
+    nli_scorer = load_nli_scorer(settings.nli_model) if settings.nli_enabled else None
+    if settings.nli_enabled and nli_scorer is not None:
+        log.info("nli_judge_human_agreement", agreement=round(agreement(nli_scorer), 3))
+    reports = evaluate(backend, nli_scorer, settings.nli_entailment_threshold)
     name = backend.name if backend else "template"
     print(render_report(reports, name))
     if update_eval_doc(eval_doc_block(reports, name)):
