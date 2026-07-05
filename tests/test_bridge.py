@@ -81,6 +81,31 @@ def test_bridge_maps_real_campaign_schema_to_rated_evidence() -> None:
 
 
 @respx.mock
+def test_bridge_annotates_threat_actor_nation() -> None:
+    respx.get("http://sentinel.test/health").mock(return_value=httpx.Response(200, json={}))
+    respx.get("http://sentinel.test/campaigns").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "campaign_id": "c9",
+                    "report_count": 3,
+                    "kev_cves": [],
+                    "techniques": [],
+                    "reports": [{"title": "Sandworm targets the power grid"}],
+                }
+            ],
+        )
+    )
+    items = SentinelBridge("http://sentinel.test").campaigns_as_evidence(limit=5)
+    assert len(items) == 1
+    ev = items[0]
+    # The named group is resolved to its nation and surfaced in the title + summary, honestly.
+    assert "Russia" in ev.title
+    assert "Sandworm" in ev.summary and "Russia" in ev.summary and "contested" in ev.summary
+
+
+@respx.mock
 def test_bridge_caps_results_client_side() -> None:
     # SENTINEL's /campaigns has no limit param (returns all); the bridge must cap itself.
     respx.get("http://sentinel.test/health").mock(return_value=httpx.Response(200, json={}))

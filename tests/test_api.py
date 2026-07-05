@@ -55,6 +55,13 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_actors_registry(client: TestClient) -> None:
+    r = client.get("/actors")
+    assert r.status_code == 200
+    apt28 = next(a for a in r.json() if a["name"] == "APT28")
+    assert apt28["nation"] == "Russia" and "Fancy Bear" in apt28["aliases"]
+
+
 def test_stix_export(client: TestClient) -> None:
     r = client.get("/stix")
     assert r.status_code == 200
