@@ -93,24 +93,26 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
 |---|---|---|---|---|---|---|
 | What is happening at the disputed reef? | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
 | What is known about the earthquake in the  | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
-| Who won the election? | 1.00 | 1.00 | moderate | 1.00 | 2 | 2 |
+| Who won the election? | 1.00 | 1.00 | moderate | 1.00 | 2 | 0 |
 | What did the central bank decide on intere | 1.00 | 1.00 | moderate | 1.00 | 1 | 0 |
-| Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 1 | 0 |
-| Has the president fled the capital? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
-| Are armored columns massing at the border? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
-| Who fired first in the border clash? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
-| Was the grid disruption a cyberattack? | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
-| How many casualties were reported in the b | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
+| Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 2 | 0 |
+| Has the president fled the capital? | 1.00 | 1.00 | high ⚠️OVER | 1.00 | 3 | 0 |
+| Are armored columns massing at the border? | 1.00 | 1.00 | low | 1.00 | 1 | 0 |
+| Who fired first in the border clash? | 1.00 | 1.00 | moderate | 1.00 | 1 | 0 |
+| Was the grid disruption a cyberattack? | 1.00 | 1.00 | moderate | 1.00 | 1 | 1 |
+| How many casualties were reported in the b | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 2 | 0 |
 
 - **mean recall@3**: 1.00
 - **mean MRR**: 1.00
 - **mean citation coverage**: 1.00
-- **fabrication attempts caught (dropped)**: 2
-- **calibration trap breaches**: 1 (brief exceeded the confidence a single low-reliability source warrants)
-- **mean faithfulness (grounded claims, LLM-judge)**: 0.60
-- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.55
-- **mean NLI strict-entailment faithfulness (deterministic, experimental — see notes)**: 0.30
-- **mean NLI strict-entailment citation support (deterministic, experimental — see notes)**: 0.10
+- **fabrication attempts caught (dropped)**: 1
+- **calibration trap breaches**: 3 (brief exceeded the confidence a single low-reliability source warrants)
+- **mean faithfulness (grounded claims, LLM-judge)**: 0.90
+- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.50
+- **mean NLI faithfulness (atomic claim decomposition, deterministic)**: 0.33
+- **mean NLI citation support (atomic claim decomposition, deterministic)**: 0.28
+- **mean NLI faithfulness (strict whole-judgment entailment, experimental)**: 0.10
+- **mean NLI citation support (strict whole-judgment entailment, experimental)**: 0.10
 <!-- /AUTOGEN:eval-results -->
 
 **LLM-path (multi-agent deliberation, structured outputs, `ollama:qwen2.5:14b`, 10-query set).**
@@ -119,26 +121,30 @@ set was deliberately expanded from 3 to 10 queries (6 of them calibration/contes
 the calibration and judge metrics are means over many cases rather than one lucky (or unlucky)
 draw. What the larger set shows:
 
-- **Calibration held on 5 of 6 capped cases.** The president-fled (single D-rated) and
-  armored-columns (single F-rated anonymous) traps stayed *low*; the contested border clash
-  (cap moderate) and the single-analyst grid-cyberattack claim (cap moderate) both came in
-  *low* — comfortably hedged, exactly the contested-event discipline we want. The lone breach
-  is the **power-outage sabotage trap → *moderate*** (cap low). That is a *specific, reproducible*
-  weakness — qwen rated it moderate in **both** the 3- and 10-query runs — so it is a genuine
-  calibration blind spot on state-attributed-sabotage framing, not run-to-run noise. Recorded,
-  not smoothed over; it is the concrete thing to fix (persona tightening or a reliability-gated
-  confidence cap).
-- **Citation coverage 1.00, retrieval recall@3 1.00** over the 20-doc corpus (now a real
-  filter with distractors, not a formality); the resolvability invariant dropped 4 non-resolving
-  citation labels across the run (fabrications caught, never shown).
+- **Calibration is the recurring weak spot, and it is variable run-to-run** (the ⚠️OVER flags
+  and the "calibration trap breaches" count in the AUTOGEN block are the authoritative per-run
+  record). The stable finding across every run: **single low-reliability, sensational claims —
+  a foreign-sabotage blackout, a coup rumour — are where the model over-reaches.** The
+  power-outage sabotage trap has breached its *low* cap in every run; other runs have also rated
+  the president-fled coup rumour as high as *high* and the casualty-gap query *moderate*. The
+  contested border clash and single-analyst grid claim, by contrast, stay within their *moderate*
+  caps. The model does not adequately discount a lone D/F-rated source on a dramatic claim — the
+  concrete fix is a **reliability-gated confidence cap** (hard-limit confidence when the only
+  sourcing is low-reliability), not more prompt-nudging. This is the highest-value calibration
+  fix outstanding.
+- **Citation coverage 1.00, retrieval recall@3 1.00** over the 20-doc corpus (now a real filter
+  with distractors, not a formality); the resolvability invariant drops every non-resolving
+  citation label — the AUTOGEN "fabrication attempts caught" count audits it (fabrications caught,
+  never shown).
 
 **Recorded negatives (kept honestly):**
 
 - **Citation precision remains unproven, and the LLM judge is the limiting instrument.** The
-  adjudicator-prompt tightening aimed at the LLM-judge citation-support score; that score is
-  **0.67 (3-query) then 0.60 (10-query)** — no evidence of improvement, and over 10 queries the
-  judge itself is mediocre and noisy. Self-LLM-judging (the generator's family scoring its own
-  briefs) is too *stochastic* (run-to-run swing) and self-biased to certify the claim. Citation
+  adjudicator-prompt tightening aimed at the LLM-judge citation-support score; that score was
+  **0.67 (3-query) then 0.60 (first 10-query run)** and has stayed ~0.5–0.6 since — no evidence of
+  improvement, and the judge itself is mediocre and noisy run-to-run. Self-LLM-judging (the
+  generator's family scoring its own briefs) is too *stochastic* and self-biased to certify the
+  claim. Citation
   precision ships as sound tradecraft, not a demonstrated gain.
 - **Judge–human agreement, now measured — and a partial negative on the NLI fix.** We built the
   proposed deterministic, cross-family **NLI entailment scorer** (`src/argus/eval/nli.py`;
@@ -159,30 +165,40 @@ draw. What the larger set shows:
   the LLM judge (`ARGUS_NLI_ENABLED=1 make eval`), not as a replacement. A larger labelled slice
   and a stronger NLI model (or a judge ensemble) would sharpen this; the 10-pair result is a
   one-item margin and is stated as such.
-- **Bigger negative: strict entailment is the wrong bar for *analytic* judgments.** On the
-  full 10-query briefs, the NLI strict-entailment scores collapse — **faithfulness 0.30,
-  citation support 0.10** (AUTOGEN block above) — far below both the LLM judge (0.60 / 0.55)
-  and NLI's own 0.90 on the atomic slice. This is **not** a bug (citations resolve correctly as
-  `E#`; verified) and **not** a sign the briefs are unfaithful. It is the scorer: a real key
+- **Bigger negative: strict entailment is the wrong bar for *analytic* judgments.** On full
+  briefs the strict whole-judgment NLI scores collapse toward ~0.1 (AUTOGEN block, labelled
+  *experimental*) — far below the LLM judge and below NLI's own 0.90 on the atomic slice. Not a
+  bug (citations resolve as `E#`; verified) and not a sign the briefs are unfaithful: a real key
   judgment is an *assessment* that synthesizes, hedges and infers beyond any one evidence line,
-  and strict NLI entailment (the hypothesis must be *necessarily* true given the premise) marks
-  those "neutral", not "entailed". Concretely, the reef judgment — *"There is likely an ongoing
-  maritime territorial dispute… a show of force rather than immediate intent for direct
-  confrontation [E1][E2][E3]"* — scored **0.00 entailment against all three** corroborating
-  sources, though it is a sound synthesis a human and the LLM judge both credit. So
-  whole-judgment NLI entailment is **not a valid faithfulness metric for intelligence writing**;
-  the numbers are labelled *experimental* and measure the scorer's strictness, not brief
-  quality. The fix is **atomic claim decomposition** (split each judgment into atomic factual
-  sub-claims and entail each — the full RAGAS pipeline) before the entailment check is applied;
-  that is the recorded next step. The NLI scorer stays useful where claims are atomic (0.90 on
-  the slice); on compound assessments it needs decomposition first.
-- **The multi-agent panel is fragile under local-model latency.** In this run the red-team
-  `Critiques` structured step **timed out on 5 of the 10 queries** (qwen too slow on that JSON
-  schema within the 300s budget), so several briefs ran on a degraded (unchallenged) panel. The
-  brief always returned — resilience working as designed — but a degraded panel is a weaker
-  analyst, and the high timeout rate means some per-query numbers reflect the digest fallback,
-  not the full debate. Worth fixing (smaller/faster Critiques output, a lighter judge model, or
-  a longer budget), and worth stating plainly rather than reporting to the best run.
+  and strict entailment (the hypothesis must be *necessarily* true given the premise) marks those
+  "neutral", not "entailed". Concretely, the reef judgment *"There is likely an ongoing maritime
+  territorial dispute… a show of force rather than immediate intent for direct confrontation
+  [E1][E2][E3]"* scores **0.00 entailment against all three** corroborating sources, though it is
+  a sound synthesis. So whole-judgment NLI is **not a valid faithfulness metric for analytic
+  writing** — the fix is **atomic claim decomposition**.
+- **Atomic claim decomposition — the fix, built and validated.** `decompose()` (in `eval/nli.py`)
+  splits a judgment into atomic factual sub-claims (deterministic clause split + estimative-hedge
+  stripping — a free, bias-free approximation of RAGAS's LLM claim extraction);
+  `score_brief_nli(decompose_claims=True)` scores each, so faithfulness is the *fraction of
+  sub-claims entailed*, and `make eval` reports the atomic metric beside the strict one (the lift
+  — roughly 3x this run — is on the record). On the reef judgment that scored 0.00 strict,
+  decomposition separates the grounded fact *"an ongoing maritime territorial dispute near the
+  disputed reef"* (entailment **0.98**) from the ungrounded inference *"a show of force rather
+  than immediate intent for direct confrontation"* (**0.00**) for an honest atomic faithfulness
+  of **0.50** — half grounded reporting, half analytic inference beyond the evidence. **Two honest
+  limits remain:** (1) the atomic aggregate is still well below the LLM judge, because the two
+  encode *different definitions of "faithful"* — strict entailment vs. the LLM's lenient (and
+  self-optimistic) "reasonable grounding"; adjudicating which is right needs a human-labelled
+  faithfulness set, the next eval step. (2) the deterministic clause-splitter is crude on some
+  sentences; an LLM decomposer would be RAGAS-faithful but reintroduce a model dependency — the
+  zero-cost splitter is the deliberate choice.
+- **The multi-agent panel is fragile under local-model latency.** The red-team `Critiques`
+  structured step **intermittently times out** (qwen too slow on that JSON schema within the 300s
+  budget) — between 1 and 5 of the 10 queries across runs — so those briefs run on a degraded
+  (unchallenged) panel and their per-query numbers reflect the digest fallback, not the full
+  debate. The brief always returns (resilience working as designed) but a degraded panel is a
+  weaker analyst. Worth fixing (smaller/faster Critiques output, a lighter judge model, or a
+  longer budget), and stated plainly rather than reporting to the best run.
 
 **Distilled student (one-shot, MLX LoRA `Qwen2.5-3B-Instruct-4bit` + adapter)** — measured
 through the same harness in `student` mode, against the same base model with **no** adapter:
