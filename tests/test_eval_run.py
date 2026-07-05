@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from argus.eval.goldset import QUERIES
 from argus.eval.run import (
     _BEGIN,
     _END,
@@ -12,9 +13,9 @@ from argus.eval.run import (
 
 def test_evaluate_template_path_is_deterministic() -> None:
     reports = evaluate(backend=None)  # None forces the deterministic template digest
-    assert len(reports) == 3
+    assert len(reports) == len(QUERIES)
 
-    # Retrieval finds the labelled-relevant docs in this clean fixture corpus.
+    # Retrieval finds the labelled-relevant docs among the (now 20-doc) fixture corpus.
     assert all(r.recall == 1.0 for r in reports)
     # The template digest only cites real evidence -> no fabrication slips through.
     assert all(r.fabricated == [] for r in reports)
@@ -22,6 +23,15 @@ def test_evaluate_template_path_is_deterministic() -> None:
     assert all(r.coverage == 1.0 for r in reports)
     # Calibration: the digest never exceeds low confidence, so it can't breach the trap.
     assert all(not r.over_confident for r in reports)
+
+
+def test_goldset_is_a_meaningful_size_with_calibration_coverage() -> None:
+    # The set was deliberately expanded so the LLM-path means are less run-to-run noise.
+    assert len(QUERIES) >= 10
+    # Several calibration traps/contested caps, not just one, so the calibration metric is
+    # measured over multiple cases rather than a single lucky (or unlucky) draw.
+    capped = [q for q in QUERIES if q.max_confidence is not None]
+    assert len(capped) >= 4
 
 
 def test_render_report_has_aggregates() -> None:
