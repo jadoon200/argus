@@ -22,6 +22,7 @@ from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
 from argus.config import get_settings
 from argus.db.base import get_session_factory
 from argus.db.models import Brief, Document, Event, Narrative, Source
+from argus.nlp.disarm import DISARM_TECHNIQUES, default_mapper, lexical_match
 
 settings = get_settings()
 app = FastAPI(title="ARGUS", version=__version__, description="All-source intelligence workbench")
@@ -100,12 +101,29 @@ class EventOut(BaseModel):
     divergence: float | None = None  # framing divergence [0,1] — contested-event signal
 
 
+class DisarmTag(BaseModel):
+    technique_id: str  # DISARM Red Framework id, e.g. "T0086.002"
+    name: str
+    phase: str  # Plan | Prepare | Execute | Assess
+    score: float
+
+
+class DisarmTechniqueOut(BaseModel):
+    technique_id: str
+    name: str
+    phase: str
+    description: str
+
+
 class NarrativeOut(BaseModel):
     narrative_id: str
     label: str
     doc_count: int
     source_count: int
     coordination: float | None  # human-review signal in [0,1], not a verdict
+    # DISARM influence-ops techniques the framing resembles — advisory, human-review, symmetric
+    # to SENTINEL's ATT&CK tags. Empty for narratives tagged before DISARM landed.
+    disarm: list[DisarmTag] = []
     first_seen: str | None
     last_seen: str | None
 
@@ -158,6 +176,10 @@ class BriefRequest(BaseModel):
 class RetrieveRequest(BaseModel):
     query: str = Field(min_length=1)
     k: int = Field(default=8, ge=1, le=50)
+
+
+class MapDisarmRequest(BaseModel):
+    text: str = Field(min_length=1)
 
 
 # --- read-only routes ----------------------------------------------------------------
@@ -269,10 +291,46 @@ def narratives(limit: int = 50, db: Session = Depends(get_db)) -> list[Narrative
             doc_count=n.doc_count,
             source_count=n.source_count,
             coordination=n.coordination,
+            disarm=[DisarmTag(**tag) for tag in (n.disarm or [])],
             first_seen=n.first_seen.isoformat() if n.first_seen else None,
             last_seen=n.last_seen.isoformat() if n.last_seen else None,
         )
         for n in rows
+    ]
+
+
+@app.get("/disarm/techniques", response_model=list[DisarmTechniqueOut])
+def disarm_catalog() -> list[DisarmTechniqueOut]:
+    """The DISARM influence-ops technique catalog ARGUS tags narratives against — the twin of
+    SENTINEL's ATT&CK `/techniques`. Reference data (no model), so cyber TTPs and influence
+    TTPs share one shape for a hybrid-threat picture."""
+    return [
+        DisarmTechniqueOut(
+            technique_id=t.technique_id, name=t.name, phase=t.phase, description=t.description
+        )
+        for t in DISARM_TECHNIQUES
+    ]
+
+
+@app.post("/map-disarm", response_model=list[DisarmTag])
+def map_disarm(payload: MapDisarmRequest, request: Request) -> list[DisarmTag]:
+    """Zero-shot DISARM tagging of pasted text — the symmetric twin of SENTINEL's
+    POST /map-techniques (ATT&CK). Inspects the supplied text only, never fetches a URL, so the
+    graph stays read-only. Advisory human-review signal; degrades to lexical matching when
+    embeddings are unavailable (never 500s)."""
+    if len(payload.text) > settings.api_max_request_chars:
+        raise HTTPException(status_code=422, detail="text too long")
+    if not _rate_limiter.allow(request):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    try:
+        matches = default_mapper().map_text(
+            payload.text, top_k=settings.disarm_top_k, threshold=settings.disarm_threshold
+        )
+    except Exception:  # model unavailable/slim image -> dependency-free lexical fallback
+        matches = lexical_match(payload.text, top_k=settings.disarm_top_k)
+    return [
+        DisarmTag(technique_id=m.technique_id, name=m.name, phase=m.phase, score=round(m.score, 3))
+        for m in matches
     ]
 
 
