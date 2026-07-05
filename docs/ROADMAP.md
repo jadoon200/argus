@@ -36,7 +36,11 @@ queries, ingests + enriches, then re-briefs on the expanded corpus. **DISARM inf
 (`src/argus/nlp/disarm.py`, `Narrative.disarm` column, `GET /disarm/techniques`, `POST /map-disarm`) —
 zero-shot bi-encoder mapping of narratives to DISARM Red Framework techniques (20 across Plan/Prepare/Execute/Assess:
 deepfakes, conspiracy narratives, information flooding, etc.); mirrors SENTINEL's ATT&CK mapper;
-advisory human-review signal only, never an automated verdict.
+advisory human-review signal only, never an automated verdict. **Deterministic NLI faithfulness/citation cross-check**
+(`src/argus/eval/nli.py`, `ARGUS_NLI_ENABLED`, opt-in) — a cross-encoder NLI model (`cross-encoder/nli-deberta-v3-base`)
+that scores claim–evidence entailment deterministically and independently, free from the LLM judge's run-to-run variance
+and self-judging bias; measured agreement on a labelled 10-pair slice (NLI 0.90 vs LLM judge 1.00); its value is
+stability and independence, not per-item accuracy — ships as a deterministic cross-check reported alongside the LLM judge.
 
 **Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
 story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the

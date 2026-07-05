@@ -140,12 +140,14 @@ def _results_table(reports: list[QueryReport]) -> list[str]:
             f"{_mean(support):.2f}",
         ]
     nli = [r for r in reports if r.nli_faithfulness is not None]
-    if nli:  # deterministic, cross-family — no self-judging bias, no run-to-run swing
+    if nli:  # deterministic + cross-family, but strict entailment under-credits analysis (notes)
         nli_support = [r.nli_citation_support for r in nli if r.nli_citation_support is not None]
         lines += [
-            f"- **mean faithfulness (NLI entailment, deterministic)**: "
+            f"- **mean NLI strict-entailment faithfulness (deterministic, experimental "
+            f"— see notes)**: "
             f"{_mean([r.nli_faithfulness for r in nli if r.nli_faithfulness is not None]):.2f}",
-            f"- **mean citation support (NLI entailment, deterministic)**: "
+            f"- **mean NLI strict-entailment citation support (deterministic, experimental "
+            f"— see notes)**: "
             f"{_mean(nli_support):.2f}",
         ]
     return lines
