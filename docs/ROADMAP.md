@@ -41,6 +41,11 @@ advisory human-review signal only, never an automated verdict. **Deterministic N
 that scores claim–evidence entailment deterministically and independently, free from the LLM judge's run-to-run variance
 and self-judging bias; measured agreement on a labelled 10-pair slice (NLI 0.90 vs LLM judge 1.00); its value is
 stability and independence, not per-item accuracy — ships as a deterministic cross-check reported alongside the LLM judge.
+(NLI faithfulness now uses **atomic claim decomposition** — `decompose()` splits each judgment into atomic sub-claims so
+faithfulness is the RAGAS-style fraction entailed, fixing strict entailment's collapse on analytic writing.) **STIX 2.1 export**
+(`src/argus/stix.py`, `GET /stix`) — serializes the DISARM-keyed influence-ops graph (DISARM techniques → `attack-pattern`,
+tagged narratives → `report`, sources → `identity`) as a conformant, deterministic STIX 2.1 bundle, ingestible by
+OpenCTI / MISP / the ATT&CK Navigator and joinable with SENTINEL's ATT&CK STIX in one object model. Dependency-free.
 
 **Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
 story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the
