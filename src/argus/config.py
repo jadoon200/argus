@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     # an unoptimized program if `make optimize` hasn't produced data/dspy/); "student" =
     # one-shot the configured backend with the training prompt (the MLX-distilled student).
     brief_mode: str = "panel"
+    # Deterministic, cross-family NLI faithfulness/citation scoring (eval/nli.py) — a
+    # bias-free, run-to-run-stable alternative to the self-LLM-judge. Opt-in: the NLI model
+    # downloads on first use, so `make eval` only runs it when enabled (CI never pulls it).
+    nli_enabled: bool = False
+    nli_model: str = "cross-encoder/nli-deberta-v3-base"
+    nli_entailment_threshold: float = 0.5
 
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.
