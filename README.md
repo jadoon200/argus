@@ -59,7 +59,7 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
   accuracy** (does each cited source actually exist and support the claim?), **faithfulness**
   (no ungrounded claims), and source-reliability calibration — with recorded **negatives**
   where it fails. **Faithfulness and citation-support metrics are now measured** via an
-  LLM-as-judge (free/local Ollama). **Confidence is self-consistently calibrated** (opt-in high-assurance
+  LLM-as-judge (free/local Ollama) **and cross-checked by a deterministic NLI scorer** (`ARGUS_NLI_ENABLED`, opt-in): a cross-encoder entailment model that provides stable, independent verification alongside the LLM judge. **Confidence is self-consistently calibrated** (opt-in high-assurance
   mode via `ARGUS_ASSURANCE_SAMPLES`): the adjudicator is sampled K times and confidence is
   downgraded if the samples don't mostly agree, honest calibration over a lucky single draw.
   This eval harness is the point; a RAG demo that nobody graded isn't an intelligence tool.

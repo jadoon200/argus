@@ -100,7 +100,7 @@ Three ways to produce a brief, each measured on the same harness:
 
 Full methodology and results in [`docs/EVAL.md`](EVAL.md): retrieval recall, **citation
 accuracy** (resolvable + supporting via LLM-as-judge), **faithfulness/groundedness** (now
-measured), source-reliability calibration, and cross-backend parity — with recorded negatives.
+measured via both LLM-as-judge and a deterministic NLI cross-check), source-reliability calibration, and cross-backend parity — with recorded negatives.
 The gold set was expanded from 3 to 10 queries (6 calibration/contested caps) so the metrics
 are means over many cases, not one draw. On the 10-query set (`qwen2.5:14b`): retrieval
 recall@3 1.00 over a 20-doc corpus, citation coverage 1.00, **calibration held on 5 of 6 caps**
@@ -110,11 +110,17 @@ reproducible across runs, a specific state-attributed-sabotage blind spot to fix
 supports the specific judgment) targeting the LLM-judge "citation support" metric; **measured
 effect: none** — that score is 0.67 (3-query) then 0.60 (10-query), no evidence of gain, so it
 ships as sound tradecraft, not a demonstrated improvement. The honest limiter is the judge
-itself: *self*-LLM-judging is too biased and noisy to certify citation quality — a deterministic
-NLI-based (claim-level entailment) scorer, with judge–human agreement measured on a labelled
-slice, is the prerequisite for a trustworthy number. Caveat: the red-team `Critiques` step timed
-out on 5/10 queries under local-model latency, so some briefs ran on a degraded panel — reported
-plainly rather than to the best run. Full record in [`docs/EVAL.md`](EVAL.md).
+itself: *self*-LLM-judging is too biased and noisy to certify citation quality. **Deterministic NLI cross-check**
+(`ARGUS_NLI_ENABLED`, opt-in): a cross-encoder entailment model (`cross-encoder/nli-deberta-v3-base`) scores
+faithfulness and citation-support deterministically and independently, eliminating run-to-run variance and self-judging bias.
+On a hand-labelled 10-pair entailment slice: NLI agreement 9/10 (0.90), LLM judge agreement 10/10 (1.00). The NLI scorer's value is orthogonal,
+not superior — its deterministic/independent nature provides stability as a cross-check reported alongside the LLM judge, not as a replacement.
+**Documented limitation (recorded negative):** on *full* briefs the strict-entailment scores collapse (faithfulness 0.30, citation-support 0.10,
+labelled *experimental*) — not because the briefs are unfaithful but because a real key judgment is an *assessment* that synthesizes and hedges
+beyond any single evidence line, which strict NLI entailment marks "neutral", not "entailed" (e.g. a well-grounded reef synthesis scored 0.00).
+So whole-judgment NLI is not a valid faithfulness metric for analytic writing; the honest fix is atomic claim decomposition (full RAGAS) before
+the entailment check, which is the recorded next step. It stays useful on atomic factual claims. Caveat: the red-team `Critiques` step timed out
+on 5/10 queries under local-model latency, so some briefs ran on a degraded panel — reported plainly. Full record in [`docs/EVAL.md`](EVAL.md).
 
 ## Limitations & failure modes (committed up front)
 
