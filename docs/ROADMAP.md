@@ -32,7 +32,11 @@ the adjudicator K times and derives confidence from agreement, honest calibratio
 **Citation precision** — adjudicator prompt tightened to cite only *directly* supporting items,
 targeting LLM-judge citation-support. **Closing-the-loop collection** (`make collect-loop`,
 `src/argus/collection/{tasking,loop}.py`) — turns a brief's intelligence gaps into the next search
-queries, ingests + enriches, then re-briefs on the expanded corpus.
+queries, ingests + enriches, then re-briefs on the expanded corpus. **DISARM influence-ops tagging**
+(`src/argus/nlp/disarm.py`, `Narrative.disarm` column, `GET /disarm/techniques`, `POST /map-disarm`) —
+zero-shot bi-encoder mapping of narratives to DISARM Red Framework techniques (20 across Plan/Prepare/Execute/Assess:
+deepfakes, conspiracy narratives, information flooding, etc.); mirrors SENTINEL's ATT&CK mapper;
+advisory human-review signal only, never an automated verdict.
 
 **Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
 story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the

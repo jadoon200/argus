@@ -22,8 +22,8 @@ It is **decision support for a human analyst**, not an autonomous decision-maker
 
 - Help an analyst triage and summarize **public, open-source** reporting on a topic, with
   provenance and source-reliability made explicit.
-- Surface corroboration, contradictions, timelines, and candidate coordinated-narrative
-  patterns for **human review**.
+- Surface corroboration, contradictions, timelines, candidate coordinated-narrative
+  patterns, and influence-operations technique signals for **human review**.
 
 ## Out-of-scope / prohibited use
 
@@ -83,6 +83,18 @@ Three ways to produce a brief, each measured on the same harness:
   and is **faster but weaker** than the 14B teacher — a real, measured trade-off (see
   `docs/EVAL.md` / `docs/FINETUNE.md`), not free quality. The full panel stays the path for
   the highest-stakes assessments.
+
+## Technique mapping (cyber + narrative)
+
+- **Cyber:** SENTINEL's ATT&CK mapper (zero-shot bi-encoder) tags cyber evidence; techniques
+  are wired into brief citations and analyst workflow.
+- **Narrative:** DISARM Red Framework mapper (zero-shot bi-encoder over same encoder as corpus)
+  tags influence-operations techniques — 20 techniques across 4 phases (Plan/Prepare/Execute/Assess),
+  e.g. T0086.002 Develop AI-Generated Images (Deepfakes), T0022 Leverage Conspiracy Theory
+  Narratives, T0049 Flood Information Space. Mapped at narrative level; configurable threshold
+  (default 0.28) and top-k (default 3). Both are **advisory human-review signals only**, never
+  automated verdicts; a narrative tagged with deepfake or conspiracy techniques still requires human
+  analysis and corroboration.
 
 ## Evaluation
 
