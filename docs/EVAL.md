@@ -92,53 +92,62 @@ _Auto-recorded by `make eval` — backend `ollama:qwen2.5:14b`._
 | Query | recall@k | MRR | confidence | cite-coverage | citations | fabricated |
 |---|---|---|---|---|---|---|
 | What is happening at the disputed reef? | 1.00 | 1.00 | moderate | 1.00 | 3 | 3 |
-| Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 3 | 0 |
+| What is known about the earthquake in the  | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
+| Who won the election? | 1.00 | 1.00 | moderate | 1.00 | 2 | 0 |
 | What did the central bank decide on intere | 1.00 | 1.00 | moderate | 1.00 | 1 | 0 |
+| Was the nationwide power outage caused by  | 1.00 | 1.00 | moderate ⚠️OVER | 1.00 | 1 | 0 |
+| Has the president fled the capital? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
+| Are armored columns massing at the border? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
+| Who fired first in the border clash? | 1.00 | 1.00 | low | 1.00 | 3 | 0 |
+| Was the grid disruption a cyberattack? | 1.00 | 1.00 | low | 1.00 | 1 | 1 |
+| How many casualties were reported in the b | 1.00 | 1.00 | low | 1.00 | 2 | 0 |
 
 - **mean recall@3**: 1.00
 - **mean MRR**: 1.00
 - **mean citation coverage**: 1.00
-- **fabrication attempts caught (dropped)**: 3
+- **fabrication attempts caught (dropped)**: 4
 - **calibration trap breaches**: 1 (brief exceeded the confidence a single low-reliability source warrants)
-- **mean faithfulness (grounded claims, LLM-judge)**: 0.67
-- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.67
+- **mean faithfulness (grounded claims, LLM-judge)**: 0.70
+- **mean citation support (cited evidence backs the claim, LLM-judge)**: 0.60
 <!-- /AUTOGEN:eval-results -->
 
-**LLM-path (multi-agent deliberation, structured outputs, `ollama:qwen2.5:14b`):**
+**LLM-path (multi-agent deliberation, structured outputs, `ollama:qwen2.5:14b`, 10-query set).**
+The **AUTOGEN block above is the authoritative record**; this is the honest reading of it. The
+set was deliberately expanded from 3 to 10 queries (6 of them calibration/contested caps) so
+the calibration and judge metrics are means over many cases rather than one lucky (or unlucky)
+draw. What the larger set shows:
 
-| Query (gold) | recall@3 | MRR | confidence | cite coverage | citations | fabrications caught |
-|---|---|---|---|---|---|---|
-| disputed-reef standoff (3 corroborating B sources) | 1.00 | 1.00 | moderate | 1.00 | 3 | 0 |
-| power-outage sabotage (1 × D state-affiliated — TRAP) | 1.00 | 1.00 | **low** | 1.00 | 1 | 1 |
-| central-bank decision (single clear source) | 1.00 | 1.00 | low–moderate | 1.00 | 1 | 1 |
+- **Calibration held on 5 of 6 capped cases.** The president-fled (single D-rated) and
+  armored-columns (single F-rated anonymous) traps stayed *low*; the contested border clash
+  (cap moderate) and the single-analyst grid-cyberattack claim (cap moderate) both came in
+  *low* — comfortably hedged, exactly the contested-event discipline we want. The lone breach
+  is the **power-outage sabotage trap → *moderate*** (cap low). That is a *specific, reproducible*
+  weakness — qwen rated it moderate in **both** the 3- and 10-query runs — so it is a genuine
+  calibration blind spot on state-attributed-sabotage framing, not run-to-run noise. Recorded,
+  not smoothed over; it is the concrete thing to fix (persona tightening or a reliability-gated
+  confidence cap).
+- **Citation coverage 1.00, retrieval recall@3 1.00** over the 20-doc corpus (now a real
+  filter with distractors, not a formality); the resolvability invariant dropped 4 non-resolving
+  citation labels across the run (fabrications caught, never shown).
 
-- **Calibration trap held: 0 breaches** — the single low-reliability state-affiliated source
-  stayed *low* confidence (not a finding of sabotage), while the 3-source reef story earned
-  *moderate*. The ACH / estimative-language discipline is doing its job.
-- **Citation coverage 1.00** — structured JSON output makes every key judgment carry a
-  citation, and the resolvability invariant dropped every non-resolving label (fabrications
-  caught, never shown).
-- Caveats: the fixture corpus is small and lexically clean, so recall=1.00 is a regression
-  guard, not a hard retrieval test; and the model is mildly stochastic (the central-bank
-  confidence varied low↔moderate across runs). The numbers in this table are illustrative of a
-  representative run; the machine-recorded **AUTOGEN block above** is the authoritative result
-  (model stochasticity between runs can cause small variations in per-query counts).
+**Recorded negatives (kept honestly):**
 
-**Recorded negatives (latest AUTOGEN run, kept honestly):**
-
-- **Citation-precision change did not move the metric.** Tightening the adjudicator prompt to
-  cite only *directly* supporting items was aimed at the LLM-judge citation-support score, but
-  that score is **0.67 both before and after** the change on this 3-query set — no measurable
-  improvement. The set is too small and too stochastic to detect a real effect; a larger gold
-  set is the prerequisite for a clean read, so the change ships as sound tradecraft, not as a
-  demonstrated gain.
-- **A timed-out deliberation step degrades calibration.** In this run the red-team `Critiques`
-  step **timed out** on the power-outage (trap) query, so the analyst was never challenged and
-  the graceful-degradation path returned a less-calibrated digest — the query breached the
-  calibration trap (**moderate ⚠️OVER** instead of *low*) and mean faithfulness fell to 0.67.
-  The brief still returned (no crash — resilience working as designed), but a degraded panel is
-  a weaker analyst: the trap-held result depends on the full debate completing, not on any
-  single run's numbers.
+- **Citation precision remains unproven, and the LLM judge is the limiting instrument.** The
+  adjudicator-prompt tightening aimed at the LLM-judge citation-support score; that score is
+  **0.67 (3-query) then 0.60 (10-query)** — no evidence of improvement, and over 10 queries the
+  judge itself is mediocre and noisy. The honest conclusion is that *self*-LLM-judging (the
+  generator's family scoring its own briefs) is too biased and too stochastic to certify this
+  claim; a **deterministic NLI-based faithfulness/citation scorer** (claim-level entailment
+  against the cited evidence, judge–human agreement measured on a labelled slice) is the
+  prerequisite for a trustworthy number. Until then citation precision ships as sound tradecraft,
+  not a demonstrated gain.
+- **The multi-agent panel is fragile under local-model latency.** In this run the red-team
+  `Critiques` structured step **timed out on 5 of the 10 queries** (qwen too slow on that JSON
+  schema within the 300s budget), so several briefs ran on a degraded (unchallenged) panel. The
+  brief always returned — resilience working as designed — but a degraded panel is a weaker
+  analyst, and the high timeout rate means some per-query numbers reflect the digest fallback,
+  not the full debate. Worth fixing (smaller/faster Critiques output, a lighter judge model, or
+  a longer budget), and worth stating plainly rather than reporting to the best run.
 
 **Distilled student (one-shot, MLX LoRA `Qwen2.5-3B-Instruct-4bit` + adapter)** — measured
 through the same harness in `student` mode, against the same base model with **no** adapter:
