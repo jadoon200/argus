@@ -12,7 +12,7 @@ import re
 import sys
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from argus.agent.graph import run_deliberation
@@ -25,6 +25,12 @@ from argus.agent.state import (
     EvidenceItem,
     evidence_labels,
     format_evidence,
+)
+from argus.agent.triage import (
+    capabilities_brief,
+    has_relevant_evidence,
+    is_meta_query,
+    no_reporting_brief,
 )
 from argus.bridge.sentinel import cyber_evidence
 from argus.config import get_settings
@@ -384,6 +390,14 @@ def generate_brief(
 ) -> BriefResult:
     """Produce a cited brief. `backend=_AUTO` resolves from settings (free by default);
     pass an explicit backend (or None to force the deterministic digest)."""
+    # Triage 1: meta/conversational questions get an instant canned answer — a deliberation
+    # about "what can you do" is minutes of inference for a predetermined non-answer.
+    if is_meta_query(query):
+        result = capabilities_brief(query)
+        result.evidence = []
+        log.info("brief_triaged", kind="meta")
+        return result
+
     if evidence is None:
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
@@ -391,6 +405,15 @@ def generate_brief(
         # All-source fusion: append SENTINEL cyber campaigns *relevant to the query* when
         # the bridge is on (no-op by default). Cyber items become citable evidence.
         evidence = evidence + cyber_evidence(query=query)
+        # Triage 2 (retrieval path only — explicit `evidence` callers know what they passed):
+        # an empty/irrelevant corpus makes the panel's conclusion predetermined ("no
+        # evidence"), so say that instantly and task collection instead of deliberating.
+        if not evidence or not has_relevant_evidence(query, evidence):
+            n_docs = session.scalar(select(func.count()).select_from(Document)) or 0
+            result = no_reporting_brief(query, n_docs)
+            result.evidence = []
+            log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
+            return result
 
     mode = get_settings().brief_mode
     if backend is _AUTO and mode == "dspy":
