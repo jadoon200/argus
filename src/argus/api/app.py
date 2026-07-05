@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from argus import __version__
+from argus.actors import THREAT_ACTORS
 from argus.agent.analyst import gather_evidence, generate_brief, to_brief_row
 from argus.agent.llm import ollama_models, resolve_backend
 from argus.agent.state import EvidenceItem
@@ -114,6 +115,13 @@ class DisarmTechniqueOut(BaseModel):
     name: str
     phase: str
     description: str
+
+
+class ThreatActorOut(BaseModel):
+    name: str
+    nation: str  # open-reporting attribution consensus — contested, human-review
+    aliases: list[str]
+    note: str
 
 
 class NarrativeOut(BaseModel):
@@ -310,6 +318,17 @@ def disarm_catalog() -> list[DisarmTechniqueOut]:
             technique_id=t.technique_id, name=t.name, phase=t.phase, description=t.description
         )
         for t in DISARM_TECHNIQUES
+    ]
+
+
+@app.get("/actors", response_model=list[ThreatActorOut])
+def actors() -> list[ThreatActorOut]:
+    """The threat-actor → nation attribution registry — the cross-graph join that links a cyber
+    campaign (or an OSINT mention) to the geopolitical actor a brief is about. Attribution is the
+    consensus of open reporting, contested and human-review, never an automated verdict."""
+    return [
+        ThreatActorOut(name=a.name, nation=a.nation, aliases=list(a.aliases), note=a.note)
+        for a in THREAT_ACTORS
     ]
 
 

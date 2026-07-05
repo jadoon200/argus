@@ -12,12 +12,21 @@ from typing import Any
 
 import httpx
 
+from argus.actors import attributions_in_text
 from argus.agent.state import EvidenceItem
 from argus.config import Settings, get_settings
 from argus.logging import get_logger
 from argus.nlp.reliability import credibility_from_corroboration
 
 log = get_logger(__name__)
+
+
+def _campaign_text(c: dict[str, Any]) -> str:
+    """The free-text of a campaign to scan for threat-actor names (name/description + report
+    titles), so a named group can be resolved to its nation attribution."""
+    parts = [str(c.get(k) or "") for k in ("name", "title", "label", "description", "summary")]
+    parts += [str(r.get("title") or "") for r in (c.get("reports") or []) if isinstance(r, dict)]
+    return " ".join(p for p in parts if p)
 
 
 def _technique_ids(techniques: Any) -> list[str]:
@@ -138,20 +147,33 @@ class SentinelBridge:
             age_note = (
                 f" Most recent report ~{float(age_days):.0f}d ago." if age_days is not None else ""
             )
+            # Cross-graph join: resolve any threat group named in the campaign to its nation
+            # attribution, so a cyber campaign links to the geopolitical actor of the brief.
+            actors = attributions_in_text(_campaign_text(c))
+            nations = sorted({a.nation for a in actors})
+            attr_note = (
+                f" Attributed in open reporting to {', '.join(a.name for a in actors)} "
+                f"({', '.join(nations)}) — contested, human-review."
+                if actors
+                else ""
+            )
             summary = (
                 f"SENTINEL cyber campaign linking {report_count} CTI reports. "
                 f"CVEs: {', '.join(cves[:5]) or 'n/a'}. "
-                f"ATT&CK: {', '.join(techniques[:6]) or 'n/a'}.{kev_note}{age_note}"
+                f"ATT&CK: {', '.join(techniques[:6]) or 'n/a'}.{kev_note}{age_note}{attr_note}"
             )
             # KEV is real-world corroboration of exploitation — never let it score below the
             # 2-source-corroboration grade.
             credibility = credibility_from_corroboration(report_count)
             if kev:
                 credibility = min(credibility, 2)
+            title = f"Cyber threat campaign {cid}" + (" [KEV]" if kev else "")
+            if nations:
+                title += f" — {', '.join(nations)}"
             items.append(
                 EvidenceItem(
                     doc_id=f"sentinel-cyber:{cid}",
-                    title=f"Cyber threat campaign {cid}" + (" [KEV]" if kev else ""),
+                    title=title,
                     source="sentinel-cyber",
                     reliability="B",  # structured CTI from the sibling platform
                     credibility=credibility,

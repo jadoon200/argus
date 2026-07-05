@@ -51,7 +51,10 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    re-briefs on the expanded corpus (`make collect-loop`).
 6. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
    (`ARGUS_SENTINEL_API_URL`), pulls cyber campaigns in as citable evidence so one brief reasons
-   across open-source *and* cyber reporting (read-only; off by default).
+   across open-source *and* cyber reporting (read-only; off by default). A campaign naming a
+   threat group is resolved to its **nation attribution** (`APT28 ⇄ Russia`; `GET /actors`) so
+   the cyber lane joins the geopolitical actor of the brief — attribution shown as contested,
+   human-review, never an automated verdict.
 7. **Speaks the standard** — exports the DISARM-keyed influence-ops graph as a conformant
    **STIX 2.1** bundle (`GET /stix`: techniques → `attack-pattern`, narratives → `report`,
    sources → `identity`), ingestible by OpenCTI / MISP / the ATT&CK Navigator and joinable with
