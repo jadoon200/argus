@@ -48,8 +48,11 @@ class QueryReport:
     faithfulness: float | None = None
     citation_support: float | None = None
     # Deterministic, cross-family NLI metrics — None unless an NLI scorer is enabled.
+    # Atomic = RAGAS-style claim decomposition; strict = whole-judgment entailment (experimental).
     nli_faithfulness: float | None = None
     nli_citation_support: float | None = None
+    nli_strict_faithfulness: float | None = None
+    nli_strict_citation_support: float | None = None
 
 
 def evaluate(
@@ -80,11 +83,17 @@ def evaluate(
             if judged.n:
                 faithfulness, citation_support = judged.faithfulness, judged.citation_support
 
-        nli_faithfulness = nli_citation_support = None
+        nli_f = nli_cs = nli_sf = nli_scs = None
         if nli_scorer is not None and brief.key_judgments:  # deterministic NLI, when enabled
-            nli = score_brief_nli(brief.key_judgments, evidence, nli_scorer, nli_threshold)
-            if nli.n:
-                nli_faithfulness, nli_citation_support = nli.faithfulness, nli.citation_support
+            kj = brief.key_judgments
+            atomic = score_brief_nli(kj, evidence, nli_scorer, nli_threshold, decompose_claims=True)
+            strict = score_brief_nli(
+                kj, evidence, nli_scorer, nli_threshold, decompose_claims=False
+            )
+            if atomic.n:
+                nli_f, nli_cs = atomic.faithfulness, atomic.citation_support
+            if strict.n:
+                nli_sf, nli_scs = strict.faithfulness, strict.citation_support
 
         reports.append(
             QueryReport(
@@ -98,8 +107,10 @@ def evaluate(
                 over_confident=exceeds_confidence(brief.confidence, gold.max_confidence),
                 faithfulness=faithfulness,
                 citation_support=citation_support,
-                nli_faithfulness=nli_faithfulness,
-                nli_citation_support=nli_citation_support,
+                nli_faithfulness=nli_f,
+                nli_citation_support=nli_cs,
+                nli_strict_faithfulness=nli_sf,
+                nli_strict_citation_support=nli_scs,
             )
         )
     return reports
@@ -140,15 +151,22 @@ def _results_table(reports: list[QueryReport]) -> list[str]:
             f"{_mean(support):.2f}",
         ]
     nli = [r for r in reports if r.nli_faithfulness is not None]
-    if nli:  # deterministic + cross-family, but strict entailment under-credits analysis (notes)
-        nli_support = [r.nli_citation_support for r in nli if r.nli_citation_support is not None]
+    if nli:  # deterministic + cross-family; atomic decomposition is the valid metric (see notes)
+        af = [r.nli_faithfulness for r in nli if r.nli_faithfulness is not None]
+        acs = [r.nli_citation_support for r in nli if r.nli_citation_support is not None]
+        sf = [r.nli_strict_faithfulness for r in nli if r.nli_strict_faithfulness is not None]
+        scs = [
+            r.nli_strict_citation_support for r in nli if r.nli_strict_citation_support is not None
+        ]
         lines += [
-            f"- **mean NLI strict-entailment faithfulness (deterministic, experimental "
-            f"— see notes)**: "
-            f"{_mean([r.nli_faithfulness for r in nli if r.nli_faithfulness is not None]):.2f}",
-            f"- **mean NLI strict-entailment citation support (deterministic, experimental "
-            f"— see notes)**: "
-            f"{_mean(nli_support):.2f}",
+            f"- **mean NLI faithfulness (atomic claim decomposition, deterministic)**: "
+            f"{_mean(af):.2f}",
+            f"- **mean NLI citation support (atomic claim decomposition, deterministic)**: "
+            f"{_mean(acs):.2f}",
+            f"- **mean NLI faithfulness (strict whole-judgment entailment, experimental)**: "
+            f"{_mean(sf):.2f}",
+            f"- **mean NLI citation support (strict whole-judgment entailment, experimental)**: "
+            f"{_mean(scs):.2f}",
         ]
     return lines
 

@@ -115,12 +115,15 @@ itself: *self*-LLM-judging is too biased and noisy to certify citation quality. 
 faithfulness and citation-support deterministically and independently, eliminating run-to-run variance and self-judging bias.
 On a hand-labelled 10-pair entailment slice: NLI agreement 9/10 (0.90), LLM judge agreement 10/10 (1.00). The NLI scorer's value is orthogonal,
 not superior — its deterministic/independent nature provides stability as a cross-check reported alongside the LLM judge, not as a replacement.
-**Documented limitation (recorded negative):** on *full* briefs the strict-entailment scores collapse (faithfulness 0.30, citation-support 0.10,
-labelled *experimental*) — not because the briefs are unfaithful but because a real key judgment is an *assessment* that synthesizes and hedges
+**Documented limitation (recorded negative):** on *full* briefs the strict-entailment scores collapse (toward ~0.1, labelled *experimental*)
+— not because the briefs are unfaithful but because a real key judgment is an *assessment* that synthesizes and hedges
 beyond any single evidence line, which strict NLI entailment marks "neutral", not "entailed" (e.g. a well-grounded reef synthesis scored 0.00).
-So whole-judgment NLI is not a valid faithfulness metric for analytic writing; the honest fix is atomic claim decomposition (full RAGAS) before
-the entailment check, which is the recorded next step. It stays useful on atomic factual claims. Caveat: the red-team `Critiques` step timed out
-on 5/10 queries under local-model latency, so some briefs ran on a degraded panel — reported plainly. Full record in [`docs/EVAL.md`](EVAL.md).
+So whole-judgment NLI is not a valid faithfulness metric for analytic writing. **The fix — atomic claim decomposition — is now built and validated:**
+`decompose()` splits each judgment into atomic factual sub-claims (deterministic clause split + hedge stripping, a free approximation of RAGAS's
+LLM claim extraction) and scores each, so faithfulness is the *fraction of sub-claims entailed*; `make eval` reports the atomic metric beside the
+strict one. On the reef judgment that scored 0.00 strict, decomposition separates the grounded fact ("an ongoing maritime dispute near the reef",
+entailment 0.98) from the ungrounded inference ("a show of force rather than direct confrontation", 0.00) for an honest **0.50**. Caveat: the
+red-team `Critiques` step timed out on 5/10 queries under local-model latency, so some briefs ran on a degraded panel. Full record in [`docs/EVAL.md`](EVAL.md).
 
 ## Limitations & failure modes (committed up front)
 
