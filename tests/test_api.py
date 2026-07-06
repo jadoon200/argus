@@ -55,6 +55,27 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_quick_mode_brief(client: TestClient) -> None:
+    # mode=quick routes to the single-call path; with no backend it degrades to the digest.
+    r = client.post("/brief", json={"query": "standoff at the disputed reef", "mode": "quick"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backend"] == "template"  # resolved backend is None in tests -> digest
+    assert body["citations"] == ["reuters.com:1"]
+
+
+def test_ingest_endpoint_guarded_and_counts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GDELT is mocked out; zero new docs must not trigger enrichment (no model in CI).
+    monkeypatch.setattr("argus.ingest.gdelt.fetch_gdelt_articles", lambda q: [])
+    r = client.post("/ingest", json={"query": "South China Sea"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["fetched"] == 0 and body["new"] == 0
+    assert body["documents"] == 1  # the seeded corpus is intact
+
+
 def test_meta_question_answers_instantly_and_is_not_persisted(client: TestClient) -> None:
     r = client.post("/brief", json={"query": "what can u do"})
     assert r.status_code == 200

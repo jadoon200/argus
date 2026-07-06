@@ -128,7 +128,9 @@ def gather_evidence(
 
 
 def _match_header(line: str) -> str | None:
-    upper = line.upper()
+    # Models decorate headers ("**KEY JUDGMENTS:**", "## Key Judgments") — strip the
+    # markdown dressing before matching, so a styled header still parses as a section.
+    upper = line.upper().lstrip("#* ").rstrip()
     for header in _SECTION_HEADERS:
         if upper.startswith(header):
             return header
@@ -143,7 +145,9 @@ def _parse_sections(text: str) -> dict[str, list[str]]:
         header = _match_header(line)
         if header:
             current = header
-            rest = line[len(header) :].lstrip(":").strip()
+            # Slice from the *undecorated* line so "**KEY JUDGMENTS:** text" keeps "text".
+            plain = line.lstrip("#* ")
+            rest = plain[len(header) :].strip(":*# ").strip()
             if rest:
                 sections[current].append(rest)
         elif current and line:
@@ -387,9 +391,12 @@ def generate_brief(
     evidence: list[EvidenceItem] | None = None,
     backend: LLMBackend | None | object = _AUTO,
     persist: bool = True,
+    mode: str | None = None,
 ) -> BriefResult:
     """Produce a cited brief. `backend=_AUTO` resolves from settings (free by default);
-    pass an explicit backend (or None to force the deterministic digest)."""
+    pass an explicit backend (or None to force the deterministic digest). `mode` overrides
+    `ARGUS_BRIEF_MODE` per call: "quick" = one LLM call (chat-speed, ~30s), "panel" = the
+    full multi-agent deliberation (minutes; the deep-analysis path)."""
     # Triage 1: meta/conversational questions get an instant canned answer — a deliberation
     # about "what can you do" is minutes of inference for a predetermined non-answer.
     if is_meta_query(query):
@@ -415,7 +422,7 @@ def generate_brief(
             log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
             return result
 
-    mode = get_settings().brief_mode
+    mode = mode or get_settings().brief_mode
     if backend is _AUTO and mode == "dspy":
         # Optimized single-shot path. Lazy import: the `optimize` extra (DSPy) must not be
         # a hard dependency of the core serving flow.
@@ -426,10 +433,14 @@ def generate_brief(
         resolved = resolve_backend() if backend is _AUTO else cast(LLMBackend | None, backend)
         if resolved is None:
             result = extractive_brief(query, evidence)
-        elif mode == "student":
-            # One-shot the brief from the backend (the distilled student's intended use),
-            # instead of running it through the multi-agent panel it wasn't trained for.
-            result = oneshot_brief(query, evidence, resolved)
+        elif mode in ("student", "quick"):
+            # One LLM call instead of the panel: "student" is the distilled model's intended
+            # use; "quick" is the chat-speed path (same single-shot prompt, any backend).
+            try:
+                result = oneshot_brief(query, evidence, resolved)
+            except Exception as exc:  # backend hiccup -> labelled digest, never a 500
+                log.warning("oneshot_failed_using_digest", error=str(exc))
+                result = extractive_brief(query, evidence)
         else:
             result = _deliberate_or_digest(query, evidence, resolved)
     result.evidence = evidence
