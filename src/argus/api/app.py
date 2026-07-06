@@ -7,6 +7,7 @@ observable, not hidden, in a deployment.
 """
 
 from collections.abc import Iterator
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -180,6 +181,18 @@ class BriefOut(BaseModel):
 
 class BriefRequest(BaseModel):
     query: str = Field(min_length=1)
+    # "quick" = one LLM call (chat-speed); "deliberate" = the full multi-agent ACH panel.
+    mode: Literal["deliberate", "quick"] = "deliberate"
+
+
+class IngestRequest(BaseModel):
+    query: str = Field(min_length=2)
+
+
+class IngestResult(BaseModel):
+    fetched: int  # articles GDELT returned for the query
+    new: int  # documents actually added (existing ones are never clobbered)
+    documents: int  # corpus size after ingest + enrich
 
 
 class RetrieveRequest(BaseModel):
@@ -427,6 +440,36 @@ def retrieve(
     return [_evidence_out(e) for e in gather_evidence(db, payload.query, payload.k)]
 
 
+# --- collection from the dashboard (guarded write) -----------------------------------
+@app.post("/ingest", response_model=IngestResult)
+def ingest(payload: IngestRequest, request: Request, db: Session = Depends(get_db)) -> IngestResult:
+    """Ingest open-source reporting on a topic (GDELT DOC 2.0) + enrich, from the dashboard —
+    so the Collection view can fill the corpus without the CLI. Guarded like /brief (rate
+    limit + bounded concurrency): it fetches externally and runs the embedding model."""
+    if len(payload.query) > settings.api_max_request_chars:
+        raise HTTPException(status_code=422, detail="query too long")
+    if not _rate_limiter.allow(request):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    from argus.ingest.flows import persist as persist_docs
+    from argus.ingest.gdelt import fetch_gdelt_articles
+    from argus.nlp import enrich
+
+    try:
+        with _concurrency.slot():
+            articles = fetch_gdelt_articles(payload.query)
+            counts = persist_docs(db, articles)
+            if counts["new"]:
+                enrich.run(db)  # embed + entities + rebuild events for the new docs
+            db.commit()
+    except SlotUnavailable as exc:
+        raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
+    except Exception as exc:  # upstream (GDELT) failure -> a clear 502, not a stack trace
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"ingest failed: {exc}") from exc
+    total = db.scalar(select(func.count()).select_from(Document)) or 0
+    return IngestResult(fetched=len(articles), new=counts["new"], documents=total)
+
+
 # --- the expensive agent route (guarded) ---------------------------------------------
 @app.post("/brief", response_model=BriefOut)
 def create_brief(
@@ -438,7 +481,8 @@ def create_brief(
         raise HTTPException(status_code=429, detail="rate limit exceeded")
     try:
         with _concurrency.slot():
-            result = generate_brief(payload.query, session=db, persist=False)
+            mode = "quick" if payload.mode == "quick" else "panel"
+            result = generate_brief(payload.query, session=db, persist=False, mode=mode)
     except SlotUnavailable as exc:
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
 

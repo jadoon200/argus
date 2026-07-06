@@ -112,6 +112,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** "quick" = one model pass (chat-speed); "deliberate" = the full multi-agent ACH panel. */
+export type BriefMode = "quick" | "deliberate";
+
+export interface IngestResult {
+  fetched: number; // articles GDELT returned for the query
+  new: number; // documents actually added
+  documents: number; // corpus size after ingest + enrich
+}
+
 export const api = {
   health: () => get<Health>("/health"),
   model: () => get<ModelInfo>("/model"),
@@ -121,7 +130,8 @@ export const api = {
   narratives: (limit = 50) => get<NarrativeOut[]>(`/narratives?limit=${limit}`),
   briefs: (limit = 20) => get<BriefOut[]>(`/briefs?limit=${limit}`),
   retrieve: (query: string, k = 8) => post<EvidenceOut[]>("/retrieve", { query, k }),
-  brief: (query: string) => post<BriefOut>("/brief", { query }),
+  brief: (query: string, mode: BriefMode = "quick") => post<BriefOut>("/brief", { query, mode }),
+  ingest: (query: string) => post<IngestResult>("/ingest", { query }),
 };
 
 /** Admiralty source reliability A-F → human label + severity bucket for badge colour. */
