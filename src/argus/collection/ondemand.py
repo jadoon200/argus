@@ -58,6 +58,15 @@ def collect_for_query(session: Session, query: str) -> tuple[int, int]:
         return 0, 0
     counts = persist(session, articles)  # upserts graded Source rows for the FK itself
     if counts["new"]:
+        # GDELT articles arrive as bare headlines — fetch their body text first so the
+        # embeddings, events and the analyst's evidence are computed over real content.
+        from sqlalchemy import select
+
+        from argus.db.models import Document
+        from argus.nlp.fulltext import hydrate_documents, hydration_limit
+
+        fresh = list(session.scalars(select(Document).where(Document.embedding.is_(None))))
+        hydrate_documents(fresh, limit=hydration_limit())
         enrich.run(session)  # embed + entities + rebuild events for the new documents
         _rebuild_narratives(session)  # keep the narrative-watch view current too
     log.info("collected_on_demand", query=query[:80], fetched=len(articles), new=counts["new"])

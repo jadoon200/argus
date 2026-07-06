@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     # is a cache, not a prerequisite). Best-effort; GDELT failures never fail the answer.
     auto_collect: bool = True
     auto_collect_min_relevant: int = 3
+    # Full-text hydration (nlp/fulltext.py): GDELT gives headlines only, so newly collected
+    # documents get their article text fetched (bounded per collection) before enrichment —
+    # analysis over real text, not titles. 0 disables.
+    hydrate_max_per_collect: int = 60
     # Deterministic, cross-family NLI faithfulness/citation scoring (eval/nli.py) — a
     # bias-free, run-to-run-stable alternative to the self-LLM-judge. Opt-in: the NLI model
     # downloads on first use, so `make eval` only runs it when enabled (CI never pulls it).
