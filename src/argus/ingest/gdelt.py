@@ -7,6 +7,8 @@ provenance source. https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
 """
 
 import hashlib
+import re
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,6 +22,50 @@ from argus.logging import get_logger
 log = get_logger(__name__)
 
 _USER_AGENT = "Mozilla/5.0 (compatible; ARGUS-OSINT/0.1; +https://github.com/jaydenOoOo)"
+
+# GDELT rejects the ENTIRE query if any bare keyword is under 3 characters ("Your search
+# contained a keyword that was too short") — and analysts naturally write "US", "UK", "EU".
+# Expand the common geopolitical abbreviations to their quoted full forms; drop any other
+# too-short token rather than let it kill the query. (Live-caught: 'US and IRAN dynamics'
+# fetched 0 because of "US".)
+_SHORT_EXPANSIONS = {
+    "us": '"United States"',
+    "u.s.": '"United States"',
+    "uk": '"United Kingdom"',
+    "u.k.": '"United Kingdom"',
+    "eu": '"European Union"',
+    "un": '"United Nations"',
+}
+_PROPER_NOUN = re.compile(r"\b[A-Z][\w.'-]*\b")
+
+
+def sanitize_query(query: str) -> str:
+    """Make an analyst phrase safe for GDELT's keyword rules (see _SHORT_EXPANSIONS)."""
+    parts: list[str] = []
+    for token in query.split():
+        bare = token.strip(",.;:!?()")
+        expansion = _SHORT_EXPANSIONS.get(bare.lower())
+        if expansion:
+            parts.append(expansion)
+        elif len(bare) >= 3:
+            parts.append(token)
+        # else: drop it — a <3-char bare keyword invalidates the whole GDELT query
+    return " ".join(parts) or query
+
+
+def simplified_query(query: str) -> str | None:
+    """A retry query of just the proper nouns ('US and IRAN dynamics' -> '\"United States\"
+    Iran') — abstract analyst words ('dynamics', 'implications') often over-narrow GDELT's
+    keyword AND-matching to zero results. None if it wouldn't differ."""
+    nouns: list[str] = []
+    for token in dict.fromkeys(_PROPER_NOUN.findall(query)):  # dedupe, keep order
+        expansion = _SHORT_EXPANSIONS.get(token.lower())
+        if expansion:
+            nouns.append(expansion)
+        elif len(token) >= 3:
+            nouns.append(token.title() if token.isupper() else token)
+    simplified = " ".join(nouns)
+    return simplified if nouns and simplified != sanitize_query(query) else None
 
 
 def _doc_id(source: str, url: str) -> str:
@@ -69,15 +115,9 @@ def _fetch(client: httpx.Client, url: str, params: dict[str, Any]) -> dict[str, 
     return response.json()  # type: ignore[no-any-return]
 
 
-def fetch_gdelt_articles(
-    query: str,
-    max_records: int | None = None,
-    timespan: str | None = None,
+def _fetch_once(
+    client: httpx.Client, query: str, max_records: int, timespan: str
 ) -> list[Document]:
-    """Fetch recent articles matching `query` (most recent first).
-
-    Returns [] on any HTTP/parse failure — collection degrades, never crashes.
-    """
     settings = get_settings()
     q = query.strip()
     if settings.gdelt_source_lang:
@@ -86,15 +126,40 @@ def fetch_gdelt_articles(
         "query": q,
         "mode": "ArtList",
         "format": "json",
-        "maxrecords": max_records or settings.gdelt_max_records,
-        "timespan": timespan or settings.gdelt_timespan,
+        "maxrecords": max_records,
+        "timespan": timespan,
         "sort": "DateDesc",
     }
+    try:
+        payload = _fetch(client, settings.gdelt_api_url, params)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("gdelt_fetch_failed", query=query, error=str(exc))
+        return []
+    return parse_gdelt_articles(payload)
+
+
+def fetch_gdelt_articles(
+    query: str,
+    max_records: int | None = None,
+    timespan: str | None = None,
+) -> list[Document]:
+    """Fetch recent articles matching `query` (most recent first).
+
+    The query is sanitized for GDELT's keyword rules, and a zero-result query is retried
+    once with just its proper nouns (analyst phrasing like 'US and IRAN dynamics'
+    over-narrows GDELT's AND-matching). Returns [] on any HTTP/parse failure — collection
+    degrades, never crashes."""
+    settings = get_settings()
+    records = max_records or settings.gdelt_max_records
+    span = timespan or settings.gdelt_timespan
     headers = {"User-Agent": _USER_AGENT}
     with httpx.Client(timeout=settings.http_timeout_seconds, headers=headers) as client:
-        try:
-            payload = _fetch(client, settings.gdelt_api_url, params)
-        except (httpx.HTTPError, ValueError) as exc:
-            log.warning("gdelt_fetch_failed", query=query, error=str(exc))
-            return []
-    return parse_gdelt_articles(payload)
+        docs = _fetch_once(client, sanitize_query(query), records, span)
+        if docs:
+            return docs
+        retry_q = simplified_query(query)
+        if retry_q:
+            time.sleep(5)  # GDELT rate limit: one request per 5 seconds
+            log.info("gdelt_retry_simplified", original=query[:60], simplified=retry_q[:60])
+            docs = _fetch_once(client, retry_q, records, span)
+    return docs

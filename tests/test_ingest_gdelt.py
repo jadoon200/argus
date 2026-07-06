@@ -1,7 +1,13 @@
 import httpx
+import pytest
 import respx
 
-from argus.ingest.gdelt import fetch_gdelt_articles, parse_gdelt_articles
+from argus.ingest.gdelt import (
+    fetch_gdelt_articles,
+    parse_gdelt_articles,
+    sanitize_query,
+    simplified_query,
+)
 
 GDELT_PAYLOAD = {
     "articles": [
@@ -57,3 +63,36 @@ def test_fetch_gdelt_returns_documents() -> None:
 def test_fetch_gdelt_degrades_on_http_error() -> None:
     respx.get("https://api.gdeltproject.org/api/v2/doc/doc").mock(return_value=httpx.Response(500))
     assert fetch_gdelt_articles("anything") == []
+
+
+def test_sanitize_query_expands_short_geopolitical_tokens() -> None:
+    # GDELT rejects the whole query on any <3-char bare keyword ("US" broke a live ingest).
+    assert sanitize_query("US and IRAN dynamics") == '"United States" and IRAN dynamics'
+    assert sanitize_query("EU sanctions on X") == '"European Union" sanctions'  # short dropped
+    assert sanitize_query("South China Sea") == "South China Sea"  # untouched
+
+
+def test_simplified_query_keeps_proper_nouns_only() -> None:
+    assert simplified_query("US and IRAN dynamics") == '"United States" Iran'
+    assert simplified_query("undersea cable sabotage") is None  # no proper nouns
+    assert simplified_query("Iran") is None  # wouldn't differ from the sanitized query
+
+
+@respx.mock
+def test_fetch_gdelt_retries_zero_results_with_proper_nouns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("argus.ingest.gdelt.time.sleep", lambda s: None)  # no real rate-wait
+    route = respx.get("https://api.gdeltproject.org/api/v2/doc/doc").mock(
+        side_effect=[
+            httpx.Response(200, json={"articles": []}),  # over-narrow analyst phrasing
+            httpx.Response(200, json=GDELT_PAYLOAD),  # simplified retry hits
+        ]
+    )
+    docs = fetch_gdelt_articles("US and IRAN dynamics")
+    assert len(docs) == 1
+    assert route.call_count == 2
+    first_q = route.calls[0].request.url.params["query"]
+    retry_q = route.calls[1].request.url.params["query"]
+    assert '"United States" and IRAN dynamics' in first_q
+    assert '"United States" Iran' in retry_q and "dynamics" not in retry_q
