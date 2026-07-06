@@ -84,6 +84,9 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
     from argus.nlp.contest import framing_divergence  # local: contest imports events._normalize
 
     docs = list(session.scalars(select(Document).where(Document.embedding.is_not(None))).all())
+    # Defensive: drop rows whose embedding is empty at the Python level (a stored JSON
+    # `null` passes the SQL filter) — one bad row must not crash the whole rebuild.
+    docs = [d for d in docs if d.embedding]
     if not docs:
         return 0
     embeddings = np.asarray([d.embedding for d in docs], dtype=np.float32)

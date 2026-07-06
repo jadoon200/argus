@@ -218,7 +218,8 @@ function BriefCard({ b }: { b: BriefOut }) {
         <span>{b.evidence.length === 0 && b.citations.length > 0 ? `${b.citations.length} citations` : "every citation resolves to a real ingested document"}</span>
         {b.body && (
           <button className="raw-toggle" onClick={() => setRaw((v) => !v)}>
-            {raw ? "hide" : "show"} adjudicator output
+            {/* honest label: only the deliberation path has an adjudicator */}
+            {raw ? "hide" : "show"} {b.mode === "panel" ? "adjudicator output" : "raw model output"}
           </button>
         )}
       </div>

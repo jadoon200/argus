@@ -10,11 +10,8 @@ Failures degrade to 0 documents (offline GDELT must never turn a question into a
 the caller falls through to whatever the corpus already holds.
 """
 
-from datetime import timedelta
-
 from sqlalchemy.orm import Session
 
-from argus.config import get_settings
 from argus.ingest.flows import persist
 from argus.ingest.gdelt import fetch_gdelt_articles
 from argus.logging import get_logger
@@ -28,20 +25,9 @@ def _rebuild_narratives(session: Session) -> None:
     Narratives tab populates from normal use instead of requiring `make narratives`.
     Best-effort: a narrative failure must never fail a collection."""
     try:
-        from argus.narrative.run import rebuild_narratives
-        from argus.nlp.disarm import DisarmMapper
+        from argus.narrative.run import refresh
 
-        settings = get_settings()
-        count = rebuild_narratives(
-            session,
-            settings.narrative_threshold,
-            settings.narrative_min_cluster_size,
-            timedelta(hours=settings.coordination_window_hours),
-            mapper=DisarmMapper(),  # same encoder as enrichment — already loaded
-            disarm_top_k=settings.disarm_top_k,
-            disarm_threshold=settings.disarm_threshold,
-        )
-        log.info("narratives_refreshed", narratives=count)
+        log.info("narratives_refreshed", narratives=refresh(session))
     except Exception as exc:
         log.warning("narrative_refresh_failed", error=str(exc))
 

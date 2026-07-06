@@ -76,6 +76,10 @@ def extract_main_text(page: str, max_chars: int = _MAX_CHARS) -> str:
 
 
 def _fetch_text(url: str) -> str:
+    # Feed/GDELT data is external input: only ever follow http(s) URLs (no file://,
+    # ftp:// or other schemes a hostile feed entry could smuggle in).
+    if not url.lower().startswith(("http://", "https://")):
+        return ""
     try:
         with httpx.Client(
             timeout=_FETCH_TIMEOUT, headers={"User-Agent": _USER_AGENT}, follow_redirects=True
@@ -135,3 +139,33 @@ def reembed_documents(docs: list["Document"]) -> None:
 
 def hydration_limit() -> int:
     return get_settings().hydrate_max_per_collect
+
+
+def main() -> None:
+    """Backfill: hydrate every headline-only document in the corpus, re-enrich, refresh
+    narratives. One-off repair for documents ingested before hydration existed.
+
+        python -m argus.nlp.fulltext    # make hydrate
+    """
+    from sqlalchemy import select
+
+    from argus.db.base import session_scope
+    from argus.db.models import Document
+    from argus.logging import configure_logging
+    from argus.nlp import enrich
+
+    configure_logging()
+    with session_scope() as session:
+        docs = list(session.scalars(select(Document)))
+        pending = sum(1 for d in docs if needs_text(d))
+        hydrated = hydrate_documents(docs)  # no limit: this is the explicit repair pass
+        if hydrated:
+            enrich.run(session)  # re-embed the hydrated docs + rebuild events over real text
+            from argus.narrative.run import refresh
+
+            refresh(session)
+        print(f"hydrated {hydrated} of {pending} headline-only docs")
+
+
+if __name__ == "__main__":
+    main()
