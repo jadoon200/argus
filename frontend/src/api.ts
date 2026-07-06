@@ -72,6 +72,11 @@ export interface BriefOut {
   /** Cited evidence with Admiralty ratings (incl. cyber-fusion items), in citation
    *  order. Populated on a fresh POST /brief; [] for persisted listings. */
   evidence: EvidenceOut[];
+  /** Adaptive-path transparency (fresh POST /brief only): mode that actually ran, the
+   *  router's reason, and how many docs collect-on-demand fetched for this question. */
+  mode?: string | null;
+  mode_reason?: string | null;
+  auto_collected?: number | null;
   body: string;
   created_at: string | null;
 }
@@ -112,8 +117,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/** "quick" = one model pass (chat-speed); "deliberate" = the full multi-agent ACH panel. */
-export type BriefMode = "quick" | "deliberate";
+/** "auto" = the effort router decides; "quick" = one model pass; "deliberate" = full panel. */
+export type BriefMode = "auto" | "quick" | "deliberate";
 
 export interface IngestResult {
   fetched: number; // articles GDELT returned for the query
@@ -130,7 +135,7 @@ export const api = {
   narratives: (limit = 50) => get<NarrativeOut[]>(`/narratives?limit=${limit}`),
   briefs: (limit = 20) => get<BriefOut[]>(`/briefs?limit=${limit}`),
   retrieve: (query: string, k = 8) => post<EvidenceOut[]>("/retrieve", { query, k }),
-  brief: (query: string, mode: BriefMode = "quick") => post<BriefOut>("/brief", { query, mode }),
+  brief: (query: string, mode: BriefMode = "auto") => post<BriefOut>("/brief", { query, mode }),
   ingest: (query: string) => post<IngestResult>("/ingest", { query }),
 };
 

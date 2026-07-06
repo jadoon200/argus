@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from argus.agent.graph import run_deliberation
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.personas import ONESHOT_SYSTEM
+from argus.agent.router import decide_mode
 from argus.agent.schemas import Finding
 from argus.agent.state import (
     BriefResult,
@@ -31,8 +32,10 @@ from argus.agent.triage import (
     has_relevant_evidence,
     is_meta_query,
     no_reporting_brief,
+    relevant_count,
 )
 from argus.bridge.sentinel import cyber_evidence
+from argus.collection.ondemand import collect_for_query
 from argus.config import get_settings
 from argus.db.base import session_scope
 from argus.db.models import Brief, Document, Source
@@ -122,6 +125,7 @@ def gather_evidence(
                 summary=doc.summary,
                 published=doc.published.date().isoformat() if doc.published else None,
                 url=doc.url,
+                embedding=doc.embedding,  # carried for divergence-based effort routing
             )
         )
     return items
@@ -405,24 +409,47 @@ def generate_brief(
         log.info("brief_triaged", kind="meta")
         return result
 
+    settings = get_settings()
+    auto_collected: int | None = None
     if evidence is None:
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
-        evidence = gather_evidence(session, query, get_settings().brief_context_docs)
-        # All-source fusion: append SENTINEL cyber campaigns *relevant to the query* when
-        # the bridge is on (no-op by default). Cyber items become citable evidence.
-        evidence = evidence + cyber_evidence(query=query)
-        # Triage 2 (retrieval path only — explicit `evidence` callers know what they passed):
-        # an empty/irrelevant corpus makes the panel's conclusion predetermined ("no
-        # evidence"), so say that instantly and task collection instead of deliberating.
+
+        def _retrieve() -> list[EvidenceItem]:
+            # All-source fusion: append SENTINEL cyber campaigns *relevant to the query*
+            # when the bridge is on (no-op by default). Cyber items become citable evidence.
+            gathered = gather_evidence(session, query, settings.brief_context_docs)
+            return gathered + cyber_evidence(query=query)
+
+        evidence = _retrieve()
+        # Collect-on-demand: thin/no relevant coverage -> fetch reporting for the question
+        # inline (the corpus is a cache, not a prerequisite), then retrieve again.
+        if (
+            settings.auto_collect
+            and relevant_count(query, evidence) < settings.auto_collect_min_relevant
+        ):
+            _, auto_collected = collect_for_query(session, query)
+            if auto_collected:
+                evidence = _retrieve()
+        # Triage (retrieval path only — explicit `evidence` callers know what they passed):
+        # if the corpus still holds nothing relevant after collection, say so instantly
+        # instead of deliberating to a predetermined "no evidence".
         if not evidence or not has_relevant_evidence(query, evidence):
             n_docs = session.scalar(select(func.count()).select_from(Document)) or 0
             result = no_reporting_brief(query, n_docs)
             result.evidence = []
+            result.auto_collected = auto_collected
             log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
             return result
 
-    mode = mode or get_settings().brief_mode
+    mode = mode or settings.brief_mode
+    mode_reason: str | None = None
+    if mode == "auto":
+        # Adaptive effort routing: escalate to the panel only where it earns its minutes
+        # (attribution questions, low-reliability-only sourcing, contested framing).
+        routed, mode_reason = decide_mode(query, evidence, settings.contested_threshold)
+        mode = "panel" if routed == "panel" else "quick"
+        log.info("brief_routed", mode=mode, reason=mode_reason)
     if backend is _AUTO and mode == "dspy":
         # Optimized single-shot path. Lazy import: the `optimize` extra (DSPy) must not be
         # a hard dependency of the core serving flow.
@@ -444,6 +471,9 @@ def generate_brief(
         else:
             result = _deliberate_or_digest(query, evidence, resolved)
     result.evidence = evidence
+    result.mode = mode
+    result.mode_reason = mode_reason
+    result.auto_collected = auto_collected
 
     if persist and session is not None:
         session.add(to_brief_row(result))

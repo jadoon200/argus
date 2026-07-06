@@ -152,6 +152,15 @@ def _content_tokens(text: str) -> set[str]:
     return {t for t in _TOKEN.findall((text or "").lower()) if t not in _STOPWORDS}
 
 
+def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
+    """How many evidence items share a content token with the query — the thin-coverage
+    signal that triggers collect-on-demand (fewer relevant docs than the configured floor)."""
+    q_tokens = _content_tokens(query)
+    if not q_tokens:
+        return 0  # a query with no content words can't be assessed against evidence
+    return sum(1 for e in evidence if q_tokens & _content_tokens(f"{e.title} {e.summary or ''}"))
+
+
 def has_relevant_evidence(query: str, evidence: list[EvidenceItem]) -> bool:
     """Cheap relevance gate: does ANY evidence item share a content token with the query?
 
@@ -159,7 +168,4 @@ def has_relevant_evidence(query: str, evidence: list[EvidenceItem]) -> bool:
     holds; when the corpus has nothing on the topic, that evidence is noise and the panel
     would deliberate to a predetermined 'no evidence' - detect it deterministically instead.
     Conservative on purpose: one shared content token anywhere keeps the evidence."""
-    q_tokens = _content_tokens(query)
-    if not q_tokens:
-        return False  # a query with no content words can't be assessed against evidence
-    return any(q_tokens & _content_tokens(f"{e.title} {e.summary or ''}") for e in evidence)
+    return relevant_count(query, evidence) > 0
