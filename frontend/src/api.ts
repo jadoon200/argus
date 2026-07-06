@@ -34,6 +34,16 @@ export interface EventOut {
   occurred: string | null;
   doc_count: number;
   source_count: number;
+  /** Framing divergence [0,1] across the event's sources — the contested-event signal. */
+  divergence?: number | null;
+}
+
+/** A DISARM influence-ops technique a narrative's framing resembles (advisory). */
+export interface DisarmTag {
+  technique_id: string; // DISARM Red Framework id, e.g. "T0086.002"
+  name: string;
+  phase: string; // Plan | Prepare | Execute | Assess
+  score: number;
 }
 
 export interface NarrativeOut {
@@ -42,6 +52,8 @@ export interface NarrativeOut {
   doc_count: number;
   source_count: number;
   coordination: number | null; // human-review signal in [0,1], not a verdict
+  /** DISARM techniques the framing resembles — human-review signal, never a verdict. */
+  disarm: DisarmTag[];
   first_seen: string | null;
   last_seen: string | null;
 }
@@ -132,6 +144,7 @@ export const api = {
   stats: () => get<Stats>("/stats"),
   sources: () => get<SourceOut[]>("/sources"),
   events: (limit = 50) => get<EventOut[]>(`/events?limit=${limit}`),
+  contested: (limit = 20) => get<EventOut[]>(`/contested?limit=${limit}`),
   narratives: (limit = 50) => get<NarrativeOut[]>(`/narratives?limit=${limit}`),
   briefs: (limit = 20) => get<BriefOut[]>(`/briefs?limit=${limit}`),
   retrieve: (query: string, k = 8) => post<EvidenceOut[]>("/retrieve", { query, k }),

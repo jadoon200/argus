@@ -75,6 +75,28 @@ def test_hydrate_respects_limit() -> None:
     assert route.call_count == 2
 
 
+def test_explicit_none_embedding_is_sql_null(session) -> None:
+    # Regression (live-caught): with SQLAlchemy JSON's default none_as_null=False, an
+    # explicit `doc.embedding = None` stored JSON `null` — invisible to the enrich
+    # pipeline's `embedding IS NULL` filter but matched by the event rebuild's
+    # `IS NOT NULL` selection, crashing it with a ragged array. JsonType now sets
+    # none_as_null=True so Python None always means SQL NULL.
+    from sqlalchemy import select
+
+    from argus.db.models import Source
+
+    session.add(Source(label="s", reliability="B"))
+    doc = Document(doc_id="s:1", source="s", title="t", embedding=[1.0, 0.0])
+    session.add(doc)
+    session.flush()
+    doc.embedding = None  # what hydration does before re-embedding
+    session.flush()
+    session.expire_all()
+    assert (
+        session.scalars(select(Document).where(Document.embedding.is_(None))).one().doc_id == "s:1"
+    )
+
+
 def test_reembed_uses_new_text(monkeypatch) -> None:
     calls: list[list[str]] = []
 

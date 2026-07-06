@@ -98,19 +98,26 @@ def rebuild_narratives(
     return len(clusters)
 
 
+def refresh(session: Session) -> int:
+    """Rebuild the narrative view with settings-configured knobs + DISARM tagging — the
+    one entry point shared by `make narratives`, collect-on-demand, and the hydration
+    backfill, so every path produces the same view."""
+    settings = get_settings()
+    return rebuild_narratives(
+        session,
+        settings.narrative_threshold,
+        settings.narrative_min_cluster_size,
+        timedelta(hours=settings.coordination_window_hours),
+        mapper=DisarmMapper(),  # tag each narrative with DISARM techniques (real encoder)
+        disarm_top_k=settings.disarm_top_k,
+        disarm_threshold=settings.disarm_threshold,
+    )
+
+
 def main() -> None:
     configure_logging()
-    settings = get_settings()
     with session_scope() as session:
-        count = rebuild_narratives(
-            session,
-            settings.narrative_threshold,
-            settings.narrative_min_cluster_size,
-            timedelta(hours=settings.coordination_window_hours),
-            mapper=DisarmMapper(),  # tag each narrative with DISARM techniques (real encoder)
-            disarm_top_k=settings.disarm_top_k,
-            disarm_threshold=settings.disarm_threshold,
-        )
+        count = refresh(session)
     log.info("narratives_rebuilt", narratives=count)
 
 

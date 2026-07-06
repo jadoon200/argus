@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives brief eval api ui
+.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives hydrate brief eval api ui
 
 # One-time: create the conda env, then `conda activate argus`
 env:
@@ -45,6 +45,11 @@ enrich:
 # Narrative clustering + coordination detection (Layer 2b).
 narratives:
 	python -m argus.narrative.run
+
+# Backfill article text for headline-only documents (ingested before hydration existed),
+# then re-enrich and refresh narratives over the real text.
+hydrate:
+	python -m argus.nlp.fulltext
 
 # Generate a cited intelligence brief for a question.
 #   make brief Q="What happened in the South China Sea this week?"

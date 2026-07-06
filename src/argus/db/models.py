@@ -16,7 +16,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from argus.db.base import Base
 
 # JSONB on Postgres, plain JSON elsewhere (keeps unit tests runnable on SQLite).
-JsonType = JSON().with_variant(postgresql.JSONB(), "postgresql")
+# none_as_null: Python None must mean SQL NULL, not a stored JSON `null` — otherwise an
+# explicit `doc.embedding = None` is invisible to `embedding IS NULL` filters but matched
+# by `IS NOT NULL` selections (live-caught: the hydration backfill crashed event rebuild
+# with a ragged embedding array because of exactly this split).
+JsonType = JSON(none_as_null=True).with_variant(postgresql.JSONB(none_as_null=True), "postgresql")
 
 
 def _now() -> datetime:
