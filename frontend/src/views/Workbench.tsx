@@ -20,6 +20,12 @@ type Mode = BriefMode | "evidence";
 
 /** Honest stage labels per mode — quick is one model pass, deliberate is the full panel. */
 const STAGES: Record<Mode, string[]> = {
+  auto: [
+    "Retrieving source-rated evidence",
+    "Collecting fresh reporting if coverage is thin",
+    "Routing analytic effort (quick vs full panel)",
+    "Producing the cited brief",
+  ],
   quick: ["Retrieving source-rated evidence", "Drafting the cited brief — one model pass"],
   deliberate: [
     "Retrieving source-rated evidence",
@@ -140,9 +146,21 @@ function BriefCard({ b }: { b: BriefOut }) {
               {b.confidence} confidence
             </span>
           )}
+          {b.mode && (
+            <span className="backend-tag" title={b.mode_reason ?? undefined}>
+              {b.mode === "panel" ? "deliberated" : "quick"}
+            </span>
+          )}
           {b.backend && <span className="backend-tag">{b.backend}</span>}
         </span>
       </div>
+
+      {(b.mode_reason || (b.auto_collected ?? 0) > 0) && (
+        <p className="muted" style={{ margin: "2px 0 10px", fontSize: 12 }}>
+          {(b.auto_collected ?? 0) > 0 && <>auto-collected {b.auto_collected} fresh documents · </>}
+          {b.mode_reason && <>routed: {b.mode_reason}</>}
+        </p>
+      )}
 
       {b.key_judgments.length > 0 ? (
         <ul className="kj">
@@ -242,8 +260,8 @@ function Deliberating({ mode }: { mode: Mode }) {
 export function Workbench() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  // Quick is the chat default (one model pass); Deliberate is the opt-in deep analysis.
-  const [mode, setMode] = useState<Mode>("quick");
+  // Auto is the chat default: the effort router decides when a question earns the panel.
+  const [mode, setMode] = useState<Mode>("auto");
   const idRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -285,8 +303,9 @@ export function Workbench() {
             </svg>
             <p className="section-note" style={{ margin: "0 auto 16px", textAlign: "center" }}>
               Ask an intelligence question and get a <b>cited brief</b> — every judgment backed by
-              source-rated evidence. <b>Quick</b> answers in one model pass; <b>Deliberate</b> runs the
-              multi-agent ACH panel (hypotheses, red-team, calibrated confidence) for the deep assessment.
+              source-rated evidence. <b>Auto</b> routes each question itself: chat-speed single pass for
+              descriptive asks, the multi-agent ACH panel where it matters (attribution, contested or
+              low-reliability sourcing) — and collects fresh reporting when the corpus is thin.
             </p>
             <div className="examples" style={{ justifyContent: "center" }}>
               {EXAMPLES.map((ex) => (
@@ -334,7 +353,8 @@ export function Workbench() {
         <div className="composer-hint">
           <span>Enter to send · Shift+Enter for a newline</span>
           <span className="mode-seg">
-            <button className={mode === "quick" ? "on" : ""} onClick={() => setMode("quick")} title="One model pass — chat-speed cited brief (~30s)">Quick</button>
+            <button className={mode === "auto" ? "on" : ""} onClick={() => setMode("auto")} title="The effort router decides: quick for descriptive questions, the full panel for attribution / contested / low-reliability sourcing — and collects fresh reporting when coverage is thin">Auto</button>
+            <button className={mode === "quick" ? "on" : ""} onClick={() => setMode("quick")} title="One model pass — chat-speed cited brief (~1 min)">Quick</button>
             <button className={mode === "deliberate" ? "on" : ""} onClick={() => setMode("deliberate")} title="Full multi-agent ACH deliberation — the deep assessment (minutes)">Deliberate</button>
             <button className={mode === "evidence" ? "on" : ""} onClick={() => setMode("evidence")} title="Fast retrieval, no model">Evidence only</button>
           </span>

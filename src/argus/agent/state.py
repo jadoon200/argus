@@ -17,6 +17,9 @@ class EvidenceItem:
     summary: str | None = None
     published: str | None = None  # ISO date string (display only)
     url: str | None = None
+    # Cached dense embedding (carried from the Document row when retrieved) so downstream
+    # signals — e.g. framing-divergence effort routing — need no re-embedding. Not rendered.
+    embedding: list[float] | None = None
 
     def rating(self) -> str:
         return admiralty_code(self.reliability, self.credibility)
@@ -75,6 +78,11 @@ class BriefResult:
     # can show the cited items with their Admiralty ratings without a second retrieval.
     evidence: list[EvidenceItem] = field(default_factory=list)
     backend: str = "template"
+    # Transparency for the adaptive path (response metadata, not persisted): which mode the
+    # effort router chose and why, and how many documents collect-on-demand fetched.
+    mode: str | None = None
+    mode_reason: str | None = None
+    auto_collected: int | None = None
 
 
 class DeliberationState(TypedDict, total=False):

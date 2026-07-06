@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     # an unoptimized program if `make optimize` hasn't produced data/dspy/); "student" =
     # one-shot the configured backend with the training prompt (the MLX-distilled student).
     brief_mode: str = "panel"
+    # Collect-on-demand: when a question finds fewer than `auto_collect_min_relevant`
+    # relevant documents, fetch GDELT reporting for it inline before answering (the corpus
+    # is a cache, not a prerequisite). Best-effort; GDELT failures never fail the answer.
+    auto_collect: bool = True
+    auto_collect_min_relevant: int = 3
     # Deterministic, cross-family NLI faithfulness/citation scoring (eval/nli.py) — a
     # bias-free, run-to-run-stable alternative to the self-LLM-judge. Opt-in: the NLI model
     # downloads on first use, so `make eval` only runs it when enabled (CI never pulls it).

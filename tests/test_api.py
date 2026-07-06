@@ -41,10 +41,12 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         finally:
             db.close()
 
-    # Force the deterministic template backend (no Ollama/network in tests).
+    # Force the deterministic template backend (no Ollama/network in tests), and make
+    # collect-on-demand find nothing rather than call GDELT.
     monkeypatch.setattr("argus.agent.analyst.resolve_backend", lambda: None)
     monkeypatch.setattr("argus.api.app.resolve_backend", lambda: None)
     monkeypatch.setattr("argus.api.app.ollama_models", lambda url: [])
+    monkeypatch.setattr("argus.agent.analyst.collect_for_query", lambda s, q: (0, 0))
     app.dependency_overrides[get_db] = override_db
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -53,6 +55,23 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200 and r.json()["status"] == "ok"
+
+
+def test_auto_mode_routes_and_reports(client: TestClient) -> None:
+    # Default mode is auto: the router decides and the response says what ran and why.
+    r = client.post("/brief", json={"query": "standoff at the disputed reef"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mode"] == "quick"  # descriptive question -> single pass
+    assert body["mode_reason"] and "single pass" in body["mode_reason"]
+
+
+def test_auto_mode_escalates_attribution_questions(client: TestClient) -> None:
+    r = client.post("/brief", json={"query": "Who is behind the standoff at the reef?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mode"] == "panel"  # attribution -> the deliberation path
+    assert body["mode_reason"] and "attribution" in body["mode_reason"]
 
 
 def test_quick_mode_brief(client: TestClient) -> None:
@@ -68,7 +87,8 @@ def test_ingest_endpoint_guarded_and_counts(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # GDELT is mocked out; zero new docs must not trigger enrichment (no model in CI).
-    monkeypatch.setattr("argus.ingest.gdelt.fetch_gdelt_articles", lambda q: [])
+    # NB: patch the name where ondemand.py bound it, not the defining module.
+    monkeypatch.setattr("argus.collection.ondemand.fetch_gdelt_articles", lambda q: [])
     r = client.post("/ingest", json={"query": "South China Sea"})
     assert r.status_code == 200
     body = r.json()
