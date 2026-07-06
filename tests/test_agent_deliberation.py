@@ -233,6 +233,37 @@ def test_oneshot_brief_parses_and_resolves_citations() -> None:
     assert result.indicators == ["Additional naval movements near the reef."]
 
 
+class MarkdownStudentBackend:
+    """Emits markdown-decorated section headers ('**KEY JUDGMENTS:**'), which real local
+    models produce despite the prompt — the parser must see through the dressing.
+    (Regression: a live qwen2.5:14b quick brief parsed to 0 judgments because of this.)"""
+
+    name = "md"
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+    ) -> str:
+        return (
+            "**KEY JUDGMENTS:**\n- Escalation is likely [E1].\n"
+            "**CONFIDENCE:** moderate - limited corroboration.\n"
+            "## INTELLIGENCE GAPS\nintentions unknown."
+        )
+
+
+def test_oneshot_parses_markdown_decorated_headers() -> None:
+    from argus.agent.analyst import oneshot_brief
+
+    result = oneshot_brief("q?", _EVIDENCE, MarkdownStudentBackend())
+    assert result.key_judgments == ["Escalation is likely [E1]."]
+    assert result.confidence == "moderate"
+    assert result.gaps and "intentions" in result.gaps
+    assert result.citations == ["reuters.com:1"]
+
+
 def test_generate_brief_student_mode_one_shots(monkeypatch: pytest.MonkeyPatch) -> None:
     from argus.config import Settings
 

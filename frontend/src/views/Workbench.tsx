@@ -5,6 +5,7 @@ import {
   credibilityLabel,
   reliabilityMeta,
   type AchScore,
+  type BriefMode,
   type BriefOut,
   type EvidenceOut,
 } from "../api";
@@ -15,13 +16,20 @@ const EXAMPLES = [
   "Who is behind the recent edge-VPN exploitation wave?",
 ];
 
-const STAGES = [
-  "Retrieving source-rated evidence",
-  "Framing competing hypotheses",
-  "Analyst ⇄ Red Team deliberation",
-  "ACH adjudication + calibrating confidence",
-  "Assembling the cited brief",
-];
+type Mode = BriefMode | "evidence";
+
+/** Honest stage labels per mode — quick is one model pass, deliberate is the full panel. */
+const STAGES: Record<Mode, string[]> = {
+  quick: ["Retrieving source-rated evidence", "Drafting the cited brief — one model pass"],
+  deliberate: [
+    "Retrieving source-rated evidence",
+    "Framing competing hypotheses",
+    "Analyst ⇄ Red Team deliberation",
+    "ACH adjudication + calibrating confidence",
+    "Assembling the cited brief",
+  ],
+  evidence: ["Retrieving source-rated evidence"],
+};
 
 type Msg =
   | { id: number; role: "user"; text: string }
@@ -106,6 +114,21 @@ function AchMatrix({ rows }: { rows: AchScore[] }) {
 
 function BriefCard({ b }: { b: BriefOut }) {
   const [raw, setRaw] = useState(false);
+
+  // Triage responses (help text / collection guidance) are chat messages, not intelligence
+  // products — render just the message, no tradecraft sections or citation footer.
+  if (b.backend === "triage") {
+    return (
+      <section className="panel">
+        <div className="brief-head">
+          <span className="brief-q">{b.query}</span>
+          <span className="backend-tag">instant</span>
+        </div>
+        <p className="brief-body" style={{ display: "block" }}>{b.body}</p>
+      </section>
+    );
+  }
+
   return (
     <section className="panel">
       <div className="brief-head">
@@ -121,10 +144,14 @@ function BriefCard({ b }: { b: BriefOut }) {
         </span>
       </div>
 
-      {b.key_judgments.length > 0 && (
+      {b.key_judgments.length > 0 ? (
         <ul className="kj">
           {b.key_judgments.map((k, i) => <li key={i}>{k}</li>)}
         </ul>
+      ) : (
+        // No structured judgments parsed from this model's output — show the raw answer
+        // inline rather than hiding it behind the adjudicator-output toggle.
+        b.body && <p className="brief-body" style={{ display: "block" }}>{b.body}</p>
       )}
 
       {b.ach_ranking.length > 0 && (
@@ -182,12 +209,15 @@ function BriefCard({ b }: { b: BriefOut }) {
   );
 }
 
-function Deliberating({ mode }: { mode: "brief" | "evidence" }) {
+function Deliberating({ mode }: { mode: Mode }) {
   const [stage, setStage] = useState(0);
-  const stages = mode === "evidence" ? STAGES.slice(0, 1) : STAGES;
+  const stages = STAGES[mode];
   useEffect(() => {
-    if (mode === "evidence") return;
-    const t = setInterval(() => setStage((s) => Math.min(s + 1, stages.length - 1)), 2200);
+    if (stages.length < 2) return;
+    // Pace the (cosmetic) stage ticker to the mode's real cost: the deliberate panel runs
+    // for minutes, quick for tens of seconds.
+    const ms = mode === "deliberate" ? 20000 : 8000;
+    const t = setInterval(() => setStage((s) => Math.min(s + 1, stages.length - 1)), ms);
     return () => clearInterval(t);
   }, [mode, stages.length]);
   return (
@@ -199,6 +229,12 @@ function Deliberating({ mode }: { mode: "brief" | "evidence" }) {
           {i < stage && " ✓"}
         </div>
       ))}
+      {mode === "deliberate" && (
+        <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>
+          Full panel deliberation runs several minutes on a local model — switch to Quick for a
+          chat-speed single-pass brief.
+        </p>
+      )}
     </section>
   );
 }
@@ -206,12 +242,13 @@ function Deliberating({ mode }: { mode: "brief" | "evidence" }) {
 export function Workbench() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"brief" | "evidence">("brief");
+  // Quick is the chat default (one model pass); Deliberate is the opt-in deep analysis.
+  const [mode, setMode] = useState<Mode>("quick");
   const idRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
 
   const brief = useMutation({
-    mutationFn: (q: string) => api.brief(q),
+    mutationFn: ({ q, m }: { q: string; m: BriefMode }) => api.brief(q, m),
     onSuccess: (data) => setMessages((m) => [...m, { id: idRef.current++, role: "brief", data }]),
     onError: (e) => setMessages((m) => [...m, { id: idRef.current++, role: "error", text: (e as Error).message }]),
   });
@@ -232,7 +269,8 @@ export function Workbench() {
     if (!q || busy) return;
     setMessages((m) => [...m, { id: idRef.current++, role: "user", text: q }]);
     setInput("");
-    (mode === "brief" ? brief : retrieve).mutate(q);
+    if (mode === "evidence") retrieve.mutate(q);
+    else brief.mutate({ q, m: mode });
   }
 
   return (
@@ -246,9 +284,9 @@ export function Workbench() {
               <circle cx="12" cy="12" r="1.4" fill="currentColor" />
             </svg>
             <p className="section-note" style={{ margin: "0 auto 16px", textAlign: "center" }}>
-              Ask an intelligence question. A multi-agent panel deliberates it into a <b>cited brief</b> —
-              competing hypotheses scored by ACH, key assumptions, indicators &amp; warnings, and a calibrated
-              confidence that never overstates a low-reliability source.
+              Ask an intelligence question and get a <b>cited brief</b> — every judgment backed by
+              source-rated evidence. <b>Quick</b> answers in one model pass; <b>Deliberate</b> runs the
+              multi-agent ACH panel (hypotheses, red-team, calibrated confidence) for the deep assessment.
             </p>
             <div className="examples" style={{ justifyContent: "center" }}>
               {EXAMPLES.map((ex) => (
@@ -280,7 +318,7 @@ export function Workbench() {
           <textarea
             rows={1}
             value={input}
-            placeholder={mode === "brief" ? "Ask ARGUS an intelligence question…" : "Retrieve rated evidence for…"}
+            placeholder={mode === "evidence" ? "Retrieve rated evidence for…" : "Ask ARGUS an intelligence question…"}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -290,13 +328,14 @@ export function Workbench() {
             }}
           />
           <button className="primary send" onClick={() => send()} disabled={!input.trim() || busy}>
-            {busy ? "…" : mode === "brief" ? "Brief" : "Retrieve"}
+            {busy ? "…" : mode === "evidence" ? "Retrieve" : "Brief"}
           </button>
         </div>
         <div className="composer-hint">
           <span>Enter to send · Shift+Enter for a newline</span>
           <span className="mode-seg">
-            <button className={mode === "brief" ? "on" : ""} onClick={() => setMode("brief")} title="Full multi-agent ACH deliberation">Deliberate</button>
+            <button className={mode === "quick" ? "on" : ""} onClick={() => setMode("quick")} title="One model pass — chat-speed cited brief (~30s)">Quick</button>
+            <button className={mode === "deliberate" ? "on" : ""} onClick={() => setMode("deliberate")} title="Full multi-agent ACH deliberation — the deep assessment (minutes)">Deliberate</button>
             <button className={mode === "evidence" ? "on" : ""} onClick={() => setMode("evidence")} title="Fast retrieval, no model">Evidence only</button>
           </span>
         </div>
