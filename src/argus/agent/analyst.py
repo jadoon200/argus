@@ -41,6 +41,7 @@ from argus.db.base import session_scope
 from argus.db.models import Brief, Document, Source
 from argus.logging import configure_logging, get_logger
 from argus.nlp.embed import embed_text
+from argus.nlp.fulltext import hydrate_documents, needs_text, reembed_documents
 from argus.nlp.retrieval import RetrievedDoc, hybrid_search
 
 log = get_logger(__name__)
@@ -110,6 +111,13 @@ def gather_evidence(
     by_id = {d.doc_id: d for d in docs}
     ranked = hybrid_search(query, rdocs, query_vec, top_k=len(rdocs))
     selected = _select_diverse(ranked, {d.doc_id: d.source for d in docs}, cap, k)
+
+    # Backstop hydration: any headline-only doc that made the evidence cut gets its article
+    # text fetched now — the analyst must reason over content, not titles. Best-effort.
+    to_hydrate = [by_id[doc_id] for doc_id in selected if needs_text(by_id[doc_id])]
+    if to_hydrate and hydrate_documents(to_hydrate):
+        reembed_documents(to_hydrate)
+        session.flush()
 
     items: list[EvidenceItem] = []
     for doc_id in selected:

@@ -40,7 +40,12 @@ Hard rules:
 ONESHOT_SYSTEM = (
     ARGUS_IDENTITY + "\n\nProduce the intelligence brief directly in these sections: KEY "
     "JUDGMENTS (each ending with its [E#] citation), CONFIDENCE, KEY ASSUMPTIONS, INDICATORS, "
-    "ALTERNATIVES, INTELLIGENCE GAPS."
+    "ALTERNATIVES, INTELLIGENCE GAPS.\n\n"
+    "Quality bar for KEY JUDGMENTS: each one ANSWERS THE QUESTION and is anchored in "
+    "SPECIFICS from the evidence — named actors, places, dates, figures, direct developments "
+    "— never a generic observation that could be written without reading the evidence "
+    "(bad: 'tensions may be increasing'; good: 'X did Y at Z on DATE, which indicates ...'). "
+    "State what the evidence shows, then what it means. 2-4 judgments."
 )
 
 ESTIMATIVE_LANGUAGE = """Express likelihood using ONLY this estimative lexicon (ICD 203):
