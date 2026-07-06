@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
 from argus.agent.analyst import generate_brief
@@ -9,8 +10,16 @@ from argus.agent.triage import (
     has_relevant_evidence,
     is_meta_query,
     no_reporting_brief,
+    relevant_count,
 )
 from argus.db.models import Document, Source
+
+
+@pytest.fixture(autouse=True)
+def _no_network_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Collect-on-demand must never hit GDELT from tests — default it to 'found nothing'.
+    Tests that exercise collection override this with their own fake."""
+    monkeypatch.setattr("argus.agent.analyst.collect_for_query", lambda s, q: (0, 0))
 
 
 class ExplodingBackend:
@@ -126,3 +135,43 @@ def test_canned_briefs_are_not_assessments() -> None:
     assert capabilities_brief("hi").confidence is None
     assert no_reporting_brief("q", 0).confidence is None
     assert no_reporting_brief("q", 7).body.count("7") >= 1  # names the corpus size
+
+
+def test_relevant_count() -> None:
+    reef = [_ev("Coast guard standoff at reef", "vessels massed near the disputed reef")]
+    assert relevant_count("What is happening at the disputed reef?", reef) == 1
+    assert relevant_count("quantum banking collapse", reef) == 0
+
+
+def test_collect_on_demand_fills_an_empty_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Empty corpus; the collector "fetches" a relevant doc — the question is then answered
+    # from it instead of returning the no-reporting card.
+    def fake_collect(db: Session, query: str) -> tuple[int, int]:
+        db.add(Source(label="reuters.com", reliability="B"))
+        db.add(
+            Document(
+                doc_id="reuters.com:9",
+                source="reuters.com",
+                title="Coast guard standoff at disputed reef",
+                summary="Vessels massed near the disputed reef.",
+            )
+        )
+        db.flush()
+        return 3, 1
+
+    monkeypatch.setattr("argus.agent.analyst.collect_for_query", fake_collect)
+    result = generate_brief(
+        "What is happening at the disputed reef?", session=session, backend=None, persist=False
+    )
+    assert result.backend == "template"  # answered (digest), not triaged
+    assert result.auto_collected == 1  # transparency: how many docs were fetched
+    assert result.citations == ["reuters.com:9"]
+
+
+def test_collect_on_demand_failure_still_triages(session: Session) -> None:
+    # Autouse fixture makes collection find nothing -> honest no-reporting card, no crash.
+    result = generate_brief("obscure topic nowhere in news", session=session, backend=None)
+    assert result.backend == "triage"
+    assert result.auto_collected == 0

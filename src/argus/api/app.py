@@ -175,14 +175,20 @@ class BriefOut(BaseModel):
     # The cited evidence items with their Admiralty ratings (incl. cyber-fusion items),
     # in citation order. Populated on a fresh POST /brief; [] for persisted listings.
     evidence: list[EvidenceOut] = []
+    # Adaptive-path transparency (fresh POST /brief only): which mode actually ran, why the
+    # router chose it, and how many documents collect-on-demand fetched for this question.
+    mode: str | None = None
+    mode_reason: str | None = None
+    auto_collected: int | None = None
     body: str
     created_at: str | None
 
 
 class BriefRequest(BaseModel):
     query: str = Field(min_length=1)
-    # "quick" = one LLM call (chat-speed); "deliberate" = the full multi-agent ACH panel.
-    mode: Literal["deliberate", "quick"] = "deliberate"
+    # "auto" = the effort router decides (default); "quick" = one LLM call (chat-speed);
+    # "deliberate" = the full multi-agent ACH panel.
+    mode: Literal["auto", "deliberate", "quick"] = "auto"
 
 
 class IngestRequest(BaseModel):
@@ -450,24 +456,19 @@ def ingest(payload: IngestRequest, request: Request, db: Session = Depends(get_d
         raise HTTPException(status_code=422, detail="query too long")
     if not _rate_limiter.allow(request):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
-    from argus.ingest.flows import persist as persist_docs
-    from argus.ingest.gdelt import fetch_gdelt_articles
-    from argus.nlp import enrich
+    from argus.collection.ondemand import collect_for_query
 
     try:
         with _concurrency.slot():
-            articles = fetch_gdelt_articles(payload.query)
-            counts = persist_docs(db, articles)
-            if counts["new"]:
-                enrich.run(db)  # embed + entities + rebuild events for the new docs
+            fetched, new = collect_for_query(db, payload.query)  # best-effort; (0,0) upstream-fail
             db.commit()
     except SlotUnavailable as exc:
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
-    except Exception as exc:  # upstream (GDELT) failure -> a clear 502, not a stack trace
+    except Exception as exc:  # persistence failure -> a clear 502, not a stack trace
         db.rollback()
         raise HTTPException(status_code=502, detail=f"ingest failed: {exc}") from exc
     total = db.scalar(select(func.count()).select_from(Document)) or 0
-    return IngestResult(fetched=len(articles), new=counts["new"], documents=total)
+    return IngestResult(fetched=fetched, new=new, documents=total)
 
 
 # --- the expensive agent route (guarded) ---------------------------------------------
@@ -481,7 +482,7 @@ def create_brief(
         raise HTTPException(status_code=429, detail="rate limit exceeded")
     try:
         with _concurrency.slot():
-            mode = "quick" if payload.mode == "quick" else "panel"
+            mode = {"quick": "quick", "deliberate": "panel", "auto": "auto"}[payload.mode]
             result = generate_brief(payload.query, session=db, persist=False, mode=mode)
     except SlotUnavailable as exc:
         raise HTTPException(status_code=503, detail="server busy, try again shortly") from exc
@@ -491,7 +492,9 @@ def create_brief(
         # Instant guidance (meta question / no relevant reporting) — returned to the chat
         # but never persisted: /briefs lists intelligence products, not help text.
         row.brief_id = 0
-        return _brief_out(row, [])
+        out = _brief_out(row, [])
+        out.auto_collected = result.auto_collected  # "collected N, still nothing relevant"
+        return out
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -499,4 +502,10 @@ def create_brief(
     # rated evidence cards — including cyber-fusion items, which have no Document row.
     by_id = {e.doc_id: e for e in result.evidence}
     cited = [_evidence_out(by_id[c]) for c in result.citations if c in by_id]
-    return _brief_out(row, cited)
+    out = _brief_out(row, cited)
+    out.mode, out.mode_reason, out.auto_collected = (
+        result.mode,
+        result.mode_reason,
+        result.auto_collected,
+    )
+    return out
