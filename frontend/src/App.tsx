@@ -59,9 +59,11 @@ export default function App() {
             </button>
           ))}
         </nav>
-        {tab === "ask" && <Workbench />}
-        {tab === "narr" && <Narratives />}
-        {tab === "coll" && <Collection />}
+        {/* Keep every view mounted and toggle visibility — switching tabs must never wipe
+            the chat thread or an in-flight brief (live-reported bug). */}
+        <div hidden={tab !== "ask"}><Workbench /></div>
+        <div hidden={tab !== "narr"}><Narratives /></div>
+        <div hidden={tab !== "coll"}><Collection /></div>
       </div>
     </QueryClientProvider>
   );

@@ -10,14 +10,40 @@ Failures degrade to 0 documents (offline GDELT must never turn a question into a
 the caller falls through to whatever the corpus already holds.
 """
 
+from datetime import timedelta
+
 from sqlalchemy.orm import Session
 
+from argus.config import get_settings
 from argus.ingest.flows import persist
 from argus.ingest.gdelt import fetch_gdelt_articles
 from argus.logging import get_logger
 from argus.nlp import enrich
 
 log = get_logger(__name__)
+
+
+def _rebuild_narratives(session: Session) -> None:
+    """Refresh the narrative-watch view after new documents land, so the dashboard's
+    Narratives tab populates from normal use instead of requiring `make narratives`.
+    Best-effort: a narrative failure must never fail a collection."""
+    try:
+        from argus.narrative.run import rebuild_narratives
+        from argus.nlp.disarm import DisarmMapper
+
+        settings = get_settings()
+        count = rebuild_narratives(
+            session,
+            settings.narrative_threshold,
+            settings.narrative_min_cluster_size,
+            timedelta(hours=settings.coordination_window_hours),
+            mapper=DisarmMapper(),  # same encoder as enrichment — already loaded
+            disarm_top_k=settings.disarm_top_k,
+            disarm_threshold=settings.disarm_threshold,
+        )
+        log.info("narratives_refreshed", narratives=count)
+    except Exception as exc:
+        log.warning("narrative_refresh_failed", error=str(exc))
 
 
 def collect_for_query(session: Session, query: str) -> tuple[int, int]:
@@ -33,5 +59,6 @@ def collect_for_query(session: Session, query: str) -> tuple[int, int]:
     counts = persist(session, articles)  # upserts graded Source rows for the FK itself
     if counts["new"]:
         enrich.run(session)  # embed + entities + rebuild events for the new documents
+        _rebuild_narratives(session)  # keep the narrative-watch view current too
     log.info("collected_on_demand", query=query[:80], fetched=len(articles), new=counts["new"])
     return len(articles), counts["new"]
