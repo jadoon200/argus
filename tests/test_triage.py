@@ -68,7 +68,8 @@ def test_meta_query_short_circuits_before_llm_and_retrieval() -> None:
         "what can u do", evidence=None, session=None, backend=ExplodingBackend()
     )  # type: ignore[arg-type]
     assert result.backend == "triage"
-    assert "ARGUS" in result.body and "cited brief" in result.body.lower()
+    assert "ARGUS" in result.body and "analyst workbench" in result.body
+    assert "**" not in result.body  # plain text — the chat UI does not render markdown
 
 
 def test_empty_corpus_short_circuits_the_panel(session: Session) -> None:

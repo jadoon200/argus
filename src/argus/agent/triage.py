@@ -99,20 +99,20 @@ def capabilities_brief(query: str) -> BriefResult:
     body = (
         "ARGUS is an all-source intelligence analyst workbench. Ask it an analytic "
         "question about world events and it will:\n\n"
-        "- **Collect** open-source reporting (GDELT global news + curated wire/agency RSS) "
-        'on your topics (Collection view, or `make ingest Q="<topic>"`).\n'
-        "- **Rate every source** on the NATO Admiralty scale (reliability A-F x credibility "
+        "- Collect open-source reporting (GDELT global news + curated wire/agency RSS) "
+        "on your topics - use the Collection view's ingest box.\n"
+        "- Rate every source on the NATO Admiralty scale (reliability A-F x credibility "
         "1-6) and deduplicate reporting into events.\n"
-        "- **Deliberate a cited brief** - a multi-agent panel (hypotheses -> ACH scoring -> "
-        "analyst vs red-team -> adjudicator) produces key judgments with citations that "
-        "always resolve to real ingested documents, calibrated confidence, key assumptions, "
-        "indicators & warnings, and intelligence gaps.\n"
-        "- **Watch narratives** - clusters coordinated messaging, flags contested events, "
-        "and tags influence-operations techniques (DISARM framework).\n"
-        "- **Fuse the cyber picture** - joins SENTINEL cyber campaigns (ATT&CK) into a "
-        "brief as citable evidence, with threat-actor -> nation attribution.\n\n"
-        'Try an analytic question like: *"What is driving tensions in the South China '
-        'Sea?"* - after ingesting reporting on it in the Collection view.'
+        "- Brief you two ways: Quick (one model pass, chat-speed) or Deliberate (a "
+        "multi-agent panel - hypotheses, ACH scoring, analyst vs red-team, adjudicator - "
+        "for the deep assessment). Every judgment cites real ingested documents, with "
+        "calibrated confidence, key assumptions, indicators & warnings, and gaps.\n"
+        "- Watch narratives - clusters coordinated messaging, flags contested events, and "
+        "tags influence-operations techniques (DISARM framework).\n"
+        "- Fuse the cyber picture - joins SENTINEL cyber campaigns (ATT&CK) into a brief "
+        "as citable evidence, with threat-actor -> nation attribution.\n\n"
+        "Try: ingest a topic in the Collection view, then ask something like "
+        '"What is driving tensions in the South China Sea?"'
     )
     return BriefResult(
         query=query,
@@ -134,11 +134,9 @@ def no_reporting_brief(query: str, corpus_size: int) -> BriefResult:
         reason = f"None of the {corpus_size} ingested documents appear relevant to this question."
     body = (
         f"No relevant reporting available for: {query}\n\n"
-        f"{reason} A deliberated assessment needs evidence; rather than speculate, "
-        "collect first:\n\n"
-        f"- Dashboard: Collection view -> ingest on this topic\n"
-        f'- CLI: `make ingest Q="{query}"` then `make enrich`\n'
-        f'- Or close the loop automatically: `make collect-loop Q="{query}"`\n\n'
+        f"{reason} An assessment needs evidence; rather than speculate, collect first:\n\n"
+        "- Dashboard: Collection view -> type this topic into the ingest box\n"
+        f'- CLI: make ingest Q="{query}" then make enrich\n\n'
         "Then ask again - every judgment will carry citations to the ingested reporting."
     )
     return BriefResult(

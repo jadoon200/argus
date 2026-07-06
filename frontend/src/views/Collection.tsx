@@ -1,5 +1,60 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api, reliabilityMeta, type SourceOut } from "../api";
+
+/** Fill the corpus from the dashboard: GDELT ingest + enrichment on a topic. */
+function IngestBox() {
+  const [topic, setTopic] = useState("");
+  const qc = useQueryClient();
+  const ingest = useMutation({
+    mutationFn: (q: string) => api.ingest(q),
+    onSuccess: () => {
+      // Corpus changed — refresh the metrics and any evidence-backed views.
+      void qc.invalidateQueries({ queryKey: ["stats"] });
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+    },
+  });
+
+  function run() {
+    const q = topic.trim();
+    if (q && !ingest.isPending) ingest.mutate(q);
+  }
+
+  return (
+    <section className="panel">
+      <h2>Ingest a topic</h2>
+      <p className="section-note" style={{ marginTop: 4 }}>
+        Pull open-source reporting (GDELT global news) on a topic into the corpus, then enrich it
+        — entities, events, Admiralty credibility. Takes ~30–60s.
+      </p>
+      <div className="composer-box" style={{ marginTop: 8 }}>
+        <textarea
+          rows={1}
+          value={topic}
+          placeholder='e.g. "South China Sea", "Sahel coup", "undersea cable sabotage"'
+          onChange={(e) => setTopic(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              run();
+            }
+          }}
+        />
+        <button className="primary send" onClick={run} disabled={!topic.trim() || ingest.isPending}>
+          {ingest.isPending ? "Ingesting…" : "Ingest"}
+        </button>
+      </div>
+      {ingest.isPending && <p className="muted">Fetching + enriching — this runs the embedding model, hang on…</p>}
+      {ingest.error && <div className="error">{(ingest.error as Error).message}</div>}
+      {ingest.data && (
+        <p className="section-note" style={{ marginTop: 8 }}>
+          Fetched <b>{ingest.data.fetched}</b> articles · <b>{ingest.data.new}</b> new documents added ·
+          corpus now <b>{ingest.data.documents}</b> documents. Ask the Workbench about it.
+        </p>
+      )}
+    </section>
+  );
+}
 
 function SourceRow({ s }: { s: SourceOut }) {
   const meta = reliabilityMeta(s.reliability);
@@ -45,6 +100,8 @@ export function Collection() {
         grade</b> (A–F) — conservative by design: no open source is graded A, and an unknown
         publisher defaults to F.
       </p>
+
+      <IngestBox />
 
       {stats.error && <div className="error">{(stats.error as Error).message}</div>}
       {metrics.length > 0 && (
