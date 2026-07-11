@@ -1,0 +1,23 @@
+# Render blueprint — one free web service for the whole app (API + dashboard).
+# Deploy: push to GitHub, then New → Blueprint on https://render.com and point it here.
+# The free plan spins the service down after ~15 min idle and cold-starts on the next hit
+# (~30-60s); fine for a public demo. Render injects $PORT and provides TLS + the URL.
+services:
+  - type: web
+    name: argus
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Free + key-free by design (also baked into the image; set here for visibility).
+      - key: ARGUS_LLM_BACKEND
+        value: template
+      # Answer from the baked demo corpus rather than fetching + embedding on demand
+      # (the slim image ships no embedding model).
+      - key: ARGUS_AUTO_COLLECT
+        value: "false"
+      # Render terminates TLS and sets X-Forwarded-For, so rate-limit per real client IP.
+      - key: ARGUS_API_TRUST_FORWARDED_HEADER
+        value: "true"
