@@ -21,6 +21,23 @@ from argus.nlp.reliability import credibility_from_corroboration
 log = get_logger(__name__)
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    """Coerce an upstream field to int, defaulting on a missing/malformed value — SENTINEL
+    is external input, so a stray non-numeric must degrade the field, never break a brief."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any) -> float | None:
+    """Coerce an upstream field to float, or None on a missing/malformed value."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _campaign_text(c: dict[str, Any]) -> str:
     """The free-text of a campaign to scan for threat-actor names (name/description + report
     titles), so a named group can be resolved to its nation attribution."""
@@ -74,7 +91,7 @@ class SentinelBridge:
             for m in data
             if isinstance(m, dict)
             and m.get("technique_id")
-            and float(m.get("score") or 0.0) >= min_score
+            and (_as_float(m.get("score")) or 0.0) >= min_score
         ]
 
     def available(self) -> bool:
@@ -138,15 +155,13 @@ class SentinelBridge:
             cves = [str(x) for x in (c.get("cve_ids") or [])]
             kev = [str(x) for x in (c.get("kev_cves") or [])]
             techniques = _technique_ids(c.get("techniques") or c.get("technique_ids"))
-            report_count = int(c.get("report_count") or len(c.get("reports") or []) or 0)
-            age_days = c.get("age_days")
+            report_count = _as_int(c.get("report_count")) or len(c.get("reports") or [])
+            age_days = _as_float(c.get("age_days"))
 
             kev_note = (
                 f" KEV: confirmed exploitation in the wild ({', '.join(kev[:3])})." if kev else ""
             )
-            age_note = (
-                f" Most recent report ~{float(age_days):.0f}d ago." if age_days is not None else ""
-            )
+            age_note = f" Most recent report ~{age_days:.0f}d ago." if age_days is not None else ""
             # Cross-graph join: resolve any threat group named in the campaign to its nation
             # attribution, so a cyber campaign links to the geopolitical actor of the brief.
             actors = attributions_in_text(_campaign_text(c))
