@@ -349,6 +349,9 @@ class NoJsonBackend:
 def test_structured_output_falls_back_to_text() -> None:
     result = generate_brief("q?", evidence=_EVIDENCE, backend=NoJsonBackend(), persist=False)
     assert result.backend == "nojson"
-    assert result.confidence == "high"  # parsed from the free-form text path
+    # "high" is parsed from the free-form text path, then the reliability cap lowers it:
+    # the brief cites a single B-rated source, which can't warrant high confidence.
+    assert result.confidence == "moderate"
+    assert result.confidence_note is not None and "single-source" in result.confidence_note
     assert result.hypotheses == ["One.", "Two."]
     assert result.citations == ["reuters.com:1"]
