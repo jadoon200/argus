@@ -1,9 +1,47 @@
 # Deployment notes — taking ARGUS public
 
-> **Status: forward-looking reference.** Live deployment is deferred until the React dashboard
-> lands (narrative watch and the cyber-fusion bridge are already done). The API layer
-> (`src/argus/api/`) is built and hardened; the notes below document the production posture
-> for when that time comes.
+> **Status: deploy-ready.** The whole app ships as one free container — FastAPI serves the built
+> React dashboard from the same origin as the API, on a SQLite file, with the deterministic
+> template engine (no API key, no cost). The hardening notes further down apply to any larger
+> deployment.
+
+## Free one-service deploy (recommended)
+
+The public demo is a **single container**: the dashboard and the API share one origin (no CORS,
+no separate database server, no LLM key).
+
+- **Image:** [`Dockerfile.web`](../Dockerfile.web) — a multi-stage build that compiles the React
+  app (`frontend/`) and serves it from FastAPI (`app.mount("/", StaticFiles(...))`). It bakes a
+  small demo corpus ([`scripts/seed_demo.py`](../scripts/seed_demo.py)) so the site isn't empty
+  on first load, and pins `ARGUS_LLM_BACKEND=template` + `ARGUS_AUTO_COLLECT=false` so it runs
+  with no model and no outbound calls.
+- **Storage:** a SQLite file (`ARGUS_DATABASE_URL=sqlite:////app/data/argus.db`). The API creates
+  the schema on startup for SQLite (`init_sqlite_schema`), so there is **no migration step** — a
+  fresh boot just works. (Postgres deployments still use Alembic; the startup hook is a no-op
+  there.)
+
+```bash
+# Build + run locally (visit http://localhost:8000):
+docker build -f Dockerfile.web -t argus .
+docker run --rm -p 8000:8000 argus
+```
+
+**Render (free tier), one click:** push to GitHub, then *New → Blueprint* on render.com pointing at
+[`render.yaml`](../render.yaml). Render injects `$PORT`, terminates TLS, and gives you the URL. The
+free plan idles out after ~15 min and cold-starts (~30-60s) — fine for a demo. **Hugging Face
+Spaces** (Docker SDK) and **Fly.io** work the same way from `Dockerfile.web`.
+
+Because the dashboard is served same-origin, its API calls are relative and need **no** CORS config
+or baked-in hostname. To host the static site and the API on *different* origins instead, build the
+frontend with `VITE_API_URL=https://api.example.com` and set `ARGUS_API_ALLOWED_ORIGINS` on the API
+(see the table below).
+
+To answer with a real deliberated panel instead of the template digest, point the deployment at a
+local Ollama (`ARGUS_LLM_BACKEND=ollama`, `ARGUS_OLLAMA_URL=...`) or any OpenAI-compatible server —
+still key-free — and drop `ARGUS_AUTO_COLLECT=false` to re-enable collect-on-demand (needs the full
+image with the embedding model, not the slim API stack).
+
+## Larger / hardened deployments
 
 The dashboard API (`src/argus/api/app.py`) is read-only over the knowledge graph apart from one
 expensive route: `POST /brief`, which runs retrieval + the analyst agent (and, if configured, a

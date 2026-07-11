@@ -1,6 +1,10 @@
 /** Typed client for the ARGUS read-only knowledge-graph + agent API. */
 
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Same-origin in a production build (FastAPI serves this SPA and the API from one host, so
+// relative URLs need no CORS and no baked-in hostname); localhost:8000 in dev (`make ui` on
+// :5173 talks to `make api` on :8000). VITE_API_URL overrides both — e.g. a split deploy
+// where the static site and the API live on different origins.
+const BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:8000");
 
 export interface Health {
   status: string;

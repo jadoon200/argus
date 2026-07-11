@@ -64,6 +64,19 @@ export default function App() {
         <div hidden={tab !== "ask"}><Workbench /></div>
         <div hidden={tab !== "narr"}><Narratives /></div>
         <div hidden={tab !== "coll"}><Collection /></div>
+        <footer className="site-foot">
+          <div>
+            Open-source intelligence analyst workbench — GDELT + curated RSS, NATO-Admiralty source
+            rating, and a multi-agent ACH deliberation panel.
+          </div>
+          <div style={{ marginTop: 6 }}>
+            Free &amp; open-source
+            <span className="sep">·</span>
+            <a href="https://github.com/jadoon200/argus" target="_blank" rel="noreferrer">source on GitHub</a>
+            <span className="sep">·</span>
+            analytical decision-support, not an automated verdict
+          </div>
+        </footer>
       </div>
     </QueryClientProvider>
   );
