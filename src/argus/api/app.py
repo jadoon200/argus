@@ -6,7 +6,8 @@ limits.py. GET /model exposes the active inference backend so the model layer is
 observable, not hidden, in a deployment.
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -22,13 +23,27 @@ from argus.agent.llm import ollama_models, resolve_backend
 from argus.agent.state import EvidenceItem
 from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
 from argus.config import get_settings
-from argus.db.base import get_session_factory
+from argus.db.base import get_session_factory, init_sqlite_schema
 from argus.db.models import Brief, Document, Event, Narrative, Source
 from argus.nlp.disarm import DISARM_TECHNIQUES, default_mapper, lexical_match
 from argus.stix import to_stix_bundle
 
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Free single-container deploys run on a SQLite file with no migration step; create the
+    # schema on boot (no-op on Postgres, where Alembic owns it).
+    init_sqlite_schema()
+    yield
+
+
 settings = get_settings()
-app = FastAPI(title="ARGUS", version=__version__, description="All-source intelligence workbench")
+app = FastAPI(
+    title="ARGUS",
+    version=__version__,
+    description="All-source intelligence workbench",
+    lifespan=_lifespan,
+)
 
 _allowed = [o.strip() for o in settings.api_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -509,3 +524,25 @@ def create_brief(
         result.auto_collected,
     )
     return out
+
+
+# --- serve the built dashboard (single-origin deploy) --------------------------------
+# When the frontend has been built (`frontend/dist`), serve it from the same origin as the
+# API so a public deployment is ONE service with no CORS: relative /brief, /stats, … calls
+# just work. Mounted LAST so every API route above still matches first; a no-op in dev or
+# any deployment that hosts the static site separately (the dir simply won't exist).
+def _mount_spa() -> None:
+    from pathlib import Path
+
+    from fastapi.staticfiles import StaticFiles
+
+    for candidate in (
+        Path(__file__).resolve().parents[3] / "frontend" / "dist",  # repo checkout
+        Path("/app/frontend/dist"),  # container image
+    ):
+        if candidate.is_dir():
+            app.mount("/", StaticFiles(directory=candidate, html=True), name="spa")
+            return
+
+
+_mount_spa()

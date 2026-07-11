@@ -1,0 +1,19 @@
+# Keep the build context (and image) lean and reproducible.
+.git
+.github
+**/node_modules
+frontend/dist
+data
+*.db
+.venv
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.env
+docs
+tests
+CLAUDE.md
+.claude

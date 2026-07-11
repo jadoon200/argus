@@ -280,6 +280,9 @@ export function Workbench() {
   const busy = brief.isPending || retrieve.isPending;
 
   useEffect(() => {
+    // At rest (no thread yet) keep the masthead + hero in view; only follow the
+    // conversation to the bottom once a turn is in flight or messages exist.
+    if (messages.length === 0 && !busy) return;
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, busy]);
 
@@ -292,10 +295,11 @@ export function Workbench() {
     else brief.mutate({ q, m: mode });
   }
 
+  const isEmpty = messages.length === 0 && !busy;
   return (
     <div className="chat">
-      <div className="thread">
-        {messages.length === 0 && !busy && (
+      <div className={`thread${isEmpty ? " empty" : ""}`}>
+        {isEmpty && (
           <div className="empty-chat">
             <svg className="eye" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
               <path d="M2.5 12 C5 7.6 8.5 5.7 12 5.7 S19 7.6 21.5 12 C19 16.4 15.5 18.3 12 18.3 S5 16.4 2.5 12 Z" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.6" />
