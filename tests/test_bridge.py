@@ -80,6 +80,28 @@ def test_bridge_maps_real_campaign_schema_to_rated_evidence() -> None:
     assert "ATT&CK: n/a" in plain.summary and "ago" not in plain.summary  # no techniques/age
 
 
+def test_bridge_survives_malformed_numeric_fields() -> None:
+    # SENTINEL is external input: a stray non-numeric age_days/report_count/score must
+    # degrade the field, never raise (the bridge's "never breaks a brief" contract).
+    bridge = SentinelBridge("http://sentinel.test")
+    campaign = {
+        "campaign_id": "cbad",
+        "techniques": [{"technique_id": "T1190"}],
+        "report_count": "many",  # not an int
+        "age_days": "n/a",  # not a float
+        "kev_cves": [],
+    }
+    from unittest.mock import patch
+
+    with patch.object(bridge, "campaigns", return_value=[campaign]):
+        items = bridge.campaigns_as_evidence(limit=5)
+    assert len(items) == 1
+    ev = items[0]
+    assert ev.doc_id == "sentinel-cyber:cbad"
+    assert "0 CTI reports" in ev.summary  # malformed report_count -> 0, not a crash
+    assert "ago" not in ev.summary  # malformed age_days dropped, not a crash
+
+
 @respx.mock
 def test_bridge_annotates_threat_actor_nation() -> None:
     respx.get("http://sentinel.test/health").mock(return_value=httpx.Response(200, json={}))
