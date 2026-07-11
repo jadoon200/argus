@@ -15,6 +15,7 @@ from typing import cast
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from argus.agent.calibration import apply_confidence_cap
 from argus.agent.graph import run_deliberation
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.personas import ONESHOT_SYSTEM
@@ -483,6 +484,14 @@ def generate_brief(
     result.mode_reason = mode_reason
     result.auto_collected = auto_collected
 
+    # Reliability-gated calibration: enforce in code the confidence the sourcing warrants,
+    # rather than trust the model not to over-read a lone low-reliability source.
+    capped, note = apply_confidence_cap(result.confidence, evidence, result.citations)
+    if note:
+        log.info("confidence_capped", frm=result.confidence, to=capped, reason=note)
+        result.confidence = capped
+        result.confidence_note = f"Capped to {capped}: {note}."
+
     if persist and session is not None:
         session.add(to_brief_row(result))
     log.info(
@@ -505,6 +514,8 @@ def render(result: BriefResult) -> str:
     ]
     lines += [f"  • {kj}" for kj in (result.key_judgments or ["(none)"])]
     lines += ["", f"CONFIDENCE: {result.confidence or 'n/a'}"]
+    if result.confidence_note:
+        lines += [f"  ({result.confidence_note})"]
     if result.ach_ranking:
         lines += ["", "COMPETING HYPOTHESES (ACH — least-disconfirmed first)"]
         lines += [
