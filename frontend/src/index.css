@@ -159,16 +159,15 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
 /* --- chat / analyst conversation --- */
 .chat { display: flex; flex-direction: column; min-height: calc(100vh - 250px); }
 .thread { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-bottom: 18px; }
-/* Empty state: keep the hero + composer grouped near the top instead of forcing the tall
-   min-height (which pinned the composer far below and left a big void). Once a conversation
-   exists, the min-height returns so the composer sits at the bottom of the thread. */
-.chat:has(.thread.empty) { min-height: 0; }
+/* Empty state: the page fills the viewport (thread flex:1 → composer grounded at the bottom),
+   with the hero anchored just below the tabs and the space between reading as the conversation
+   area. This keeps the top anchored and leaves no dead void at the bottom on tall screens. */
 .thread.empty { justify-content: flex-start; }
 .msg-user { align-self: flex-end; max-width: 78%; background: var(--panel-2); border: 1px solid var(--border);
   border-radius: 13px 13px 3px 13px; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; }
 .msg-argus { align-self: stretch; }
 .turn-q { color: var(--hint); font-size: 12px; margin: 0 0 8px; }
-.empty-chat { color: var(--hint); text-align: center; padding: clamp(24px, 7vh, 72px) 0 8px; max-width: 600px; margin: 0 auto; }
+.empty-chat { color: var(--hint); text-align: center; padding: clamp(20px, 5vh, 52px) 0 8px; max-width: 600px; margin: 0 auto; }
 .empty-chat .eye { color: var(--accent); opacity: 0.5; margin-bottom: 16px; }
 
 /* deliberation loader */
