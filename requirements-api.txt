@@ -1,5 +1,7 @@
-# Slim runtime for the read-only API image (Dockerfile.api) — no ML stack.
-# The deployed demo pins ARGUS_LLM_BACKEND=template, so no LLM SDK is needed here.
+# Slim runtime for the read-only API image (Dockerfile.api / Dockerfile.web) — no ML stack,
+# no Prefect. The image installs these, then the argus package with --no-deps, so EVERY
+# runtime import of the API path must be covered here. The demo pins ARGUS_LLM_BACKEND=template,
+# so no LLM SDK is needed. (Prefect/defusedxml stay out of the API path — see ingest/persist.py.)
 sqlalchemy>=2.0
 psycopg[binary]>=3.2
 pydantic>=2.7
@@ -10,3 +12,5 @@ numpy>=1.26
 langgraph>=0.2
 fastapi>=0.115
 uvicorn>=0.30
+structlog>=24.1  # argus.logging
+tenacity>=8.3  # argus.ingest.gdelt retry
