@@ -12,8 +12,8 @@ the caller falls through to whatever the corpus already holds.
 
 from sqlalchemy.orm import Session
 
-from argus.ingest.flows import persist
 from argus.ingest.gdelt import fetch_gdelt_articles
+from argus.ingest.persist import persist  # Prefect-free, so the slim API image needn't ship Prefect
 from argus.logging import get_logger
 from argus.nlp import enrich
 
