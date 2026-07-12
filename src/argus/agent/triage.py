@@ -88,6 +88,60 @@ _STOPWORDS = frozenset(
 )
 _TOKEN = re.compile(r"[a-z0-9]{3,}")
 
+# Topically-empty words — analytic framing, generic conflict vocabulary, and time refs. A
+# query must not look "relevant" to a document just because they share one of these: "assess
+# tensions between US and Iran" should NOT match South-China-Sea reporting merely via the word
+# "tensions". Relevance is judged on the SUBJECT tokens left after these are removed. (Kept out
+# of _STOPWORDS because the panel prompts still want them; only the relevance gate strips them.)
+_GENERIC = frozenset(
+    [
+        "assess",
+        "assessment",
+        "analyse",
+        "analyze",
+        "analysis",
+        "evaluate",
+        "review",
+        "update",
+        "latest",
+        "current",
+        "currently",
+        "now",
+        "today",
+        "recent",
+        "recently",
+        "situation",
+        "status",
+        "overview",
+        "summary",
+        "brief",
+        "briefing",
+        "explain",
+        "happening",
+        "going",
+        "driving",
+        "behind",
+        "tension",
+        "tensions",
+        "crisis",
+        "crises",
+        "conflict",
+        "dispute",
+        "standoff",
+        "escalation",
+        "unrest",
+        "developments",
+        "news",
+        "report",
+        "reporting",
+        "story",
+        "wave",
+        "between",
+        "around",
+        "amid",
+    ]
+)
+
 
 def is_meta_query(query: str) -> bool:
     """True for conversational/meta questions that need no evidence or deliberation."""
@@ -123,22 +177,34 @@ def capabilities_brief(query: str) -> BriefResult:
     )
 
 
-def no_reporting_brief(query: str, corpus_size: int) -> BriefResult:
-    """Instant answer when the corpus holds nothing relevant: say so and task collection.
+def no_reporting_brief(
+    query: str, corpus_size: int, collection_enabled: bool = True
+) -> BriefResult:
+    """Instant answer when the corpus holds nothing relevant: say so and guide the analyst.
 
-    The gaps text embeds the raw query, so the collection loop's fallback query derivation
-    (capitalized spans) can turn this straight into targeted ingestion."""
+    `collection_enabled` mirrors `ARGUS_AUTO_COLLECT`: when on (the full app), guide the user to
+    collect the topic; when off (e.g. the free hosted demo, which can't run the embedding model
+    to ingest), be honest that this deployment only answers over its fixed corpus. The gaps text
+    embeds the raw query so the collection loop's fallback derivation can task ingestion."""
     if corpus_size == 0:
         reason = "The corpus is empty - no open-source reporting has been ingested yet."
     else:
         reason = f"None of the {corpus_size} ingested documents appear relevant to this question."
-    body = (
-        f"No relevant reporting available for: {query}\n\n"
-        f"{reason} An assessment needs evidence; rather than speculate, collect first:\n\n"
-        "- Dashboard: Collection view -> type this topic into the ingest box\n"
-        f'- CLI: make ingest Q="{query}" then make enrich\n\n'
-        "Then ask again - every judgment will carry citations to the ingested reporting."
-    )
+    if collection_enabled:
+        how = (
+            "An assessment needs evidence; rather than speculate, collect first:\n\n"
+            "- Dashboard: Collection view -> type this topic into the ingest box\n"
+            f'- CLI: make ingest Q="{query}" then make enrich\n\n'
+            "Then ask again - every judgment will carry citations to the ingested reporting."
+        )
+    else:
+        how = (
+            "This deployment analyses a fixed sample corpus and does not collect new topics "
+            "live, so it can only answer questions about reporting already ingested - open the "
+            "Collection view to see what's covered, or try one of the example questions. To "
+            "analyse any topic with live collection, run ARGUS locally (ARGUS_AUTO_COLLECT)."
+        )
+    body = f"No relevant reporting available for: {query}\n\n{reason} {how}"
     return BriefResult(
         query=query,
         body=body,
@@ -153,11 +219,15 @@ def _content_tokens(text: str) -> set[str]:
 
 
 def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
-    """How many evidence items share a content token with the query — the thin-coverage
-    signal that triggers collect-on-demand (fewer relevant docs than the configured floor)."""
-    q_tokens = _content_tokens(query)
+    """How many evidence items share a SUBJECT token with the query — the thin-coverage
+    signal that triggers collect-on-demand (fewer relevant docs than the configured floor).
+
+    Matches on the query's subject tokens (content words minus generic framing/time words), so
+    a document isn't counted relevant just because it shares a word like "tensions" or "recent".
+    """
+    q_tokens = _content_tokens(query) - _GENERIC
     if not q_tokens:
-        return 0  # a query with no content words can't be assessed against evidence
+        return 0  # no subject to match on (e.g. "what's the latest?") — can't assess relevance
     return sum(1 for e in evidence if q_tokens & _content_tokens(f"{e.title} {e.summary or ''}"))
 
 
