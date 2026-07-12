@@ -1,0 +1,38 @@
+# Keep the free Render web service warm so it never cold-starts.
+#
+# Render's free plan sleeps a service after ~15 min idle (a ~30-60s cold start on the next
+# hit). This pings /health every ~10 min so the demo stays warm — for free, on GitHub's
+# unlimited Actions minutes for public repos. Set the repo VARIABLE `RENDER_URL` to the
+# deployed base URL (Settings → Secrets and variables → Actions → Variables) after the first
+# deploy; until then this is a no-op. Prefer a free uptime monitor (UptimeRobot / cron-job.org)
+# if you'd rather not run a scheduled workflow.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes — beats Render's 15-min idle sleep
+  workflow_dispatch: {}
+
+# Never pile up if a run is slow; the latest ping is all that matters.
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the service
+        run: |
+          URL="${{ vars.RENDER_URL }}"
+          if [ -z "$URL" ]; then
+            echo "RENDER_URL repo variable not set yet — nothing to ping. Skipping."
+            exit 0
+          fi
+          # A cold service can take up to ~60s to wake; give it room and don't fail the job.
+          if curl -fsS --max-time 90 "${URL%/}/health"; then
+            echo " — service is awake"
+          else
+            echo "ping did not return OK (service may be cold-starting); will retry next tick"
+          fi
