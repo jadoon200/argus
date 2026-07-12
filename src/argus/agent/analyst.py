@@ -445,7 +445,7 @@ def generate_brief(
         # instead of deliberating to a predetermined "no evidence".
         if not evidence or not has_relevant_evidence(query, evidence):
             n_docs = session.scalar(select(func.count()).select_from(Document)) or 0
-            result = no_reporting_brief(query, n_docs)
+            result = no_reporting_brief(query, n_docs, collection_enabled=settings.auto_collect)
             result.evidence = []
             result.auto_collected = auto_collected
             log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
