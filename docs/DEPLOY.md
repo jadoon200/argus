@@ -26,10 +26,34 @@ docker build -f Dockerfile.web -t argus .
 docker run --rm -p 8000:8000 argus
 ```
 
-**Render (free tier), one click:** push to GitHub, then *New → Blueprint* on render.com pointing at
-[`render.yaml`](../render.yaml). Render injects `$PORT`, terminates TLS, and gives you the URL. The
-free plan idles out after ~15 min and cold-starts (~30-60s) — fine for a demo. **Hugging Face
-Spaces** (Docker SDK) and **Fly.io** work the same way from `Dockerfile.web`.
+### Hugging Face Spaces (recommended free host)
+
+A free HF Space only sleeps after **~48 h** idle (vs Render's ~15 min), gives **16 GB** RAM, is
+Docker-native, and needs no card — so a demo effectively stays warm through normal traffic. Because
+a Space builds only its *own* root `Dockerfile`, the config lives in
+[`deploy/huggingface/`](../deploy/huggingface/): a tiny two-file Space (`Dockerfile` + `README.md`)
+whose Dockerfile clones this repo and builds the full-stack image. This leaves the repo's other
+Dockerfiles untouched.
+
+```bash
+# 1. Create a Docker Space at https://huggingface.co/new-space (SDK: Docker, hardware: CPU basic — free)
+# 2. Clone the (empty) Space repo and copy in the two deploy files:
+git clone https://huggingface.co/spaces/<you>/argus && cd argus
+cp /path/to/argus-repo/deploy/huggingface/{Dockerfile,README.md} .
+git add Dockerfile README.md && git commit -m "ARGUS demo" && git push
+```
+
+The Space builds (clones GitHub → builds the dashboard → serves it from FastAPI on port 7860 with a
+baked demo corpus) and gives you a public `https://<you>-argus.hf.space` URL. After pushing new
+commits to GitHub, refresh the demo with **Space → Settings → Factory rebuild** (or pin a release
+via the `ARGUS_REF` build variable). No API key, no database server, no cost.
+
+### Other hosts
+
+**Render (free), one click:** push to GitHub, then *New → Blueprint* on render.com pointing at
+[`render.yaml`](../render.yaml) (builds `Dockerfile.web`). Simplest, but the free plan idles out
+after ~15 min and cold-starts (~30-60s). **Fly.io** can stay always-on from `Dockerfile.web` but its
+free VMs are RAM-constrained and it wants a card. All three build the same single-origin image.
 
 Because the dashboard is served same-origin, its API calls are relative and need **no** CORS config
 or baked-in hostname. To host the static site and the API on *different* origins instead, build the
