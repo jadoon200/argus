@@ -170,16 +170,18 @@ export function reliabilityMeta(grade: string): { label: string; tone: string } 
   return map[g] ?? map.F;
 }
 
-/** Admiralty information credibility 1-6 → human label. */
+/** Admiralty information credibility 1-6 → human label. ARGUS scores credibility as a
+ *  *corroboration* proxy (how many independent sources reported it), NOT a truth verdict —
+ *  so the labels mirror nlp/reliability.py rather than the classic "doubtful/improbable". */
 export function credibilityLabel(c: number | null): string {
   if (c == null) return "Not rated";
   return (
     [
       "",
-      "Confirmed",
+      "Confirmed by other sources",
       "Probably true",
       "Possibly true",
-      "Doubtful",
+      "Uncorroborated (single source)",
       "Improbable",
       "Cannot be judged",
     ][c] ?? `Level ${c}`
