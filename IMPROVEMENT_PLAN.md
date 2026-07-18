@@ -82,8 +82,12 @@ were green before any change (ARGUS 189 passed / 1 skipped; SENTINEL 104 passed,
 - [x] **S5 — `keepwarm.yml` hardcoded fallback URL.** **Verified non-issue (recorded
   negative):** `curl -fsS` fails the workflow run (red X + notification) if the URL dies,
   so it is not a silent no-op. No change made.
-- [ ] **S6 — IDS coverage** — `ids/beacon.py` / `spectral.py` at ~48% test coverage while
-  feeding the seed-data pipeline every cloud visitor sees.
+- [x] **S6 — IDS coverage.** **Done:** behavior-level tests for `ids/beacon.py` and
+  `ids/spectral.py` (public API only): end-to-end detection on synthetic corpora
+  (recall 1.0 / FPR 0.0), min-events filtering, empty/single-flow/constant-timestamp
+  edges, the all-NaN nanmean path (warning stays cosmetic, result 0.0 not NaN),
+  zero-variance calibration fallback. Both modules 48% → 99%; suite 124 passed,
+  project coverage 84% → 88%. No source bugs found in the detectors.
 
 ---
 
@@ -100,9 +104,14 @@ were green before any change (ARGUS 189 passed / 1 skipped; SENTINEL 104 passed,
   (limiter concurrency tests) + A5 (bridge pool cap) committed; ARGUS gate green at
   195 passed / 1 skipped.
 
+- 2026-07-19 (final): S6 done (detector coverage 48% → 99% each, SENTINEL suite
+  124 passed). **All plan items closed** — A1–A5, S1–S6 (S5 = verified non-issue).
+
 ## Remaining
 
-- **S6** (SENTINEL: raise `ids/beacon.py` / `ids/spectral.py` coverage from ~48%) — the
-  only open item; delegated to a subagent at end of session, see log/PR state for outcome.
-- Both branches: `fix/bug-sweep-improvements` in each repo. ARGUS branched off `main`;
-  SENTINEL off `feat/cloud-deploy` (== `main` at branch time). Open PRs when ready.
+- Nothing open. Both `fix/bug-sweep-improvements` branches are pushed (ARGUS off
+  `main`; SENTINEL off `feat/cloud-deploy`, which equaled `main` at branch time) and
+  ready for PR + merge. Minor future nice-to-haves noted in passing: a real frontend
+  component smoke test for SENTINEL (S3 shipped as a CI bundle guard), and pandas-stubs
+  strict-mode noise in SENTINEL's pre-existing `test_beacon.py` dispersion test
+  (cosmetic; `make check`'s mypy scope never scans `tests/`).
