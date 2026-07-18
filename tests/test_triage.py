@@ -67,8 +67,12 @@ def test_relevance_gate() -> None:
     reef = [_ev("Coast guard standoff at reef", "vessels massed near the disputed reef")]
     assert has_relevant_evidence("What is happening at the disputed reef?", reef)
     assert not has_relevant_evidence("quantum banking collapse in the metaverse", reef)
-    assert not has_relevant_evidence("what can u do", reef)  # no content tokens
-    assert not has_relevant_evidence("anything at all", [])
+    # Subject-less queries can't be assessed for relevance — pass evidence through rather
+    # than falsely report "no relevant reporting" on a conversational follow-up (true meta
+    # queries like "what can u do" never reach this gate; is_meta_query catches them first).
+    assert has_relevant_evidence("Any updates?", reef)
+    assert has_relevant_evidence("what can u do", reef)
+    assert not has_relevant_evidence("anything at all", [])  # no evidence is still a miss
 
 
 def test_meta_query_short_circuits_before_llm_and_retrieval() -> None:
