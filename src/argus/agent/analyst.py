@@ -388,12 +388,18 @@ def _deliberate_or_digest(
     if settings.assurance_samples > 1:  # self-consistency: calibrate confidence by agreement
         from argus.agent.assurance import assured_confidence
 
-        confidence, agreement = assured_confidence(
+        assured = assured_confidence(
             state, backend, settings.assurance_samples, settings.assurance_temperature
         )
-        result.confidence = confidence
-        result.confidence_agreement = agreement
-        log.info("assured_confidence", confidence=confidence, agreement=agreement)
+        if assured is None:  # every resample failed — keep the primary panel's confidence
+            log.warning("assurance_unavailable_keeping_primary", confidence=result.confidence)
+        else:
+            result.confidence, result.confidence_agreement = assured
+            log.info(
+                "assured_confidence",
+                confidence=result.confidence,
+                agreement=result.confidence_agreement,
+            )
     return result
 
 
