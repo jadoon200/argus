@@ -108,7 +108,9 @@ class SentinelBridge:
             log.warning("sentinel_bridge_failed", error=str(exc))
             return []
         rows = data if isinstance(data, list) else data.get("campaigns", [])
-        return [r for r in rows if isinstance(r, dict)]
+        # SENTINEL ignores `limit` and returns every campaign (salience-ordered); enforce
+        # the cap client-side so an unbounded upstream can't balloon a /brief's work.
+        return [r for r in rows if isinstance(r, dict)][:limit]
 
     def _rank_by_relevance(
         self, campaigns: list[dict[str, Any]], query: str, min_score: float

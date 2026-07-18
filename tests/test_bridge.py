@@ -139,6 +139,19 @@ def test_bridge_caps_results_client_side() -> None:
 
 
 @respx.mock
+def test_campaigns_pool_is_bounded_against_unbounded_upstream() -> None:
+    # The query path fetches a deeper pool (limit * 10) before relevance-filtering; a
+    # misbehaving upstream returning thousands of rows must still be truncated to the
+    # requested pool size, not parsed into the ranking wholesale.
+    respx.get("http://sentinel.test/campaigns").mock(
+        return_value=httpx.Response(
+            200, json=[{"campaign_id": f"c{i}", "technique_ids": ["T1059"]} for i in range(500)]
+        )
+    )
+    assert len(SentinelBridge("http://sentinel.test").campaigns(30)) == 30
+
+
+@respx.mock
 def test_cyber_evidence_empty_when_unreachable() -> None:
     respx.get("http://sentinel.test/health").mock(return_value=httpx.Response(503))
     assert cyber_evidence(_settings(sentinel_api_url="http://sentinel.test")) == []
