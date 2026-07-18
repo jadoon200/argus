@@ -41,12 +41,14 @@ were green before any change (ARGUS 189 passed / 1 skipped; SENTINEL 104 passed,
   auto-collected `/brief` — user-facing request path), re-embedding the DISARM catalog
   each time. `nlp/disarm.py default_mapper()` exists precisely to cache this. **Done:**
   `refresh()` now calls `default_mapper()`; catalog embeds once per process.
-- [ ] **A4 — Thread-safety test for `api/limits.py`** — drive `RateLimiter.allow()` /
-  `ConcurrencyLimiter.slot()` from multiple threads; the locking is untested where it
-  actually matters.
-- [ ] **A5 — Bound the SENTINEL bridge fetch** — `bridge/sentinel.py` requests
-  `limit * 10` campaigns when a query is given; add a hard cap + a test asserting the
-  `limit` param is honored, so a misbehaving upstream can't balloon a `/brief`.
+- [x] **A4 — Thread-safety tests for `api/limits.py`.** **Done:** `tests/test_limits.py`
+  hammers `RateLimiter.allow()` from 16 threads (exact-budget admission, per-client
+  isolation) and proves the `ConcurrencyLimiter` cap with 3 provably-simultaneous slot
+  holders + deterministic full→`SlotUnavailable` behavior.
+- [x] **A5 — Bound the SENTINEL bridge fetch.** SENTINEL ignores the `limit` param and
+  returns every campaign, so the query path's `limit * 10` pool was unbounded upstream.
+  **Done:** `campaigns()` truncates client-side to the requested pool size; test drives a
+  500-row upstream through a 30-row cap.
 
 ## SENTINEL
 
@@ -70,14 +72,16 @@ were green before any change (ARGUS 189 passed / 1 skipped; SENTINEL 104 passed,
 
 ### Improvements (backlog, prioritized)
 
-- [ ] **S3 — Frontend smoke coverage** — CI only runs `tsc`/`vite build`/eslint, which is
-  how S1 shipped unnoticed. Add a minimal render smoke test (or at least a CI assertion
-  that the icon-font CSS lands in `dist/`).
-- [ ] **S4 — `nlp/tagging.py tag_report()` slices to `max_techniques` before applying
-  `min_score`** — a well-scoring 6th technique loses to a top-5 entry that then fails the
-  floor. Confirm intent; likely filter-then-slice.
-- [ ] **S5 — `keepwarm.yml` hardcodes a fallback Render URL** — silent no-op if the
-  service is recreated and the `RENDER_URL` repo variable isn't set; fail loudly instead.
+- [x] **S3 — CI guard for the icon regression.** **Done:** the frontend CI job now fails
+  if the Tabler icon-font CSS/woff2 ever falls out of the built bundle again (guard
+  verified against the local build). A real component smoke test remains a nice-to-have.
+- [x] **S4 — `tag_report()` sliced to `max_techniques` before applying `min_score`.**
+  Confirmed real: aggregation ranks by `(corroborations, score)`, so a strong
+  single-corroboration technique could be pushed out of the cap by floor-failing entries
+  and dropped entirely. **Fixed:** floor first, then cap; regression test added.
+- [x] **S5 — `keepwarm.yml` hardcoded fallback URL.** **Verified non-issue (recorded
+  negative):** `curl -fsS` fails the workflow run (red X + notification) if the URL dies,
+  so it is not a silent no-op. No change made.
 - [ ] **S6 — IDS coverage** — `ids/beacon.py` / `spectral.py` at ~48% test coverage while
   feeding the seed-data pipeline every cloud visitor sees.
 
@@ -89,9 +93,16 @@ were green before any change (ARGUS 189 passed / 1 skipped; SENTINEL 104 passed,
   full gate green. Plan created.
 - 2026-07-19: A3 done (mapper reuse). S1 (icon webfont) and S2 (Render trust-forwarded
   header) fixed in SENTINEL on `fix/bug-sweep-improvements`; `make check` + frontend
-  build green, dist rebuilt.
+  build green, dist rebuilt (webfont verified in bundle; browser screenshot not possible
+  in this session — origin approval unavailable).
+- 2026-07-19 (cont.): S3 (CI icon guard, verified locally), S4 (floor-before-cap fix +
+  test, SENTINEL 105 passed) committed. S5 investigated → non-issue, recorded. A4
+  (limiter concurrency tests) + A5 (bridge pool cap) committed; ARGUS gate green at
+  195 passed / 1 skipped.
 
 ## Remaining
 
-- A4, A5 (ARGUS backlog); S3–S6 (SENTINEL backlog). None are release-blocking; ordered
-  by value: S3 → A4 → S4 → A5 → S5 → S6.
+- **S6** (SENTINEL: raise `ids/beacon.py` / `ids/spectral.py` coverage from ~48%) — the
+  only open item; delegated to a subagent at end of session, see log/PR state for outcome.
+- Both branches: `fix/bug-sweep-improvements` in each repo. ARGUS branched off `main`;
+  SENTINEL off `feat/cloud-deploy` (== `main` at branch time). Open PRs when ready.
