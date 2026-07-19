@@ -9,9 +9,12 @@ function IngestBox() {
   const ingest = useMutation({
     mutationFn: (q: string) => api.ingest(q),
     onSuccess: () => {
-      // Corpus changed — refresh the metrics and any evidence-backed views.
+      // Corpus changed — refresh the metrics and any evidence-backed views. Ingest also
+      // rebuilds events + narratives server-side, so the Narrative watch queries are stale.
       void qc.invalidateQueries({ queryKey: ["stats"] });
       void qc.invalidateQueries({ queryKey: ["sources"] });
+      void qc.invalidateQueries({ queryKey: ["narratives"] });
+      void qc.invalidateQueries({ queryKey: ["contested"] });
     },
   });
 
