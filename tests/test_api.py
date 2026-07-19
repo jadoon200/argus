@@ -194,6 +194,20 @@ def test_brief_roundtrip_persists(client: TestClient) -> None:
     assert stored["key_assumptions"] == [] and stored["ach_ranking"] == []
 
 
+def test_briefs_query_lookup_serves_snapshot_with_evidence(client: TestClient) -> None:
+    """The snapshot path for the model-less demo deploy: an exact-question lookup on
+    /briefs returns the persisted brief WITH cited evidence hydrated, so the dashboard
+    can render the full product without running a model."""
+    client.post("/brief", json={"query": "standoff at the disputed reef"})
+    # Case/whitespace-insensitive match; hydrated evidence mirrors the citations.
+    hits = client.get("/briefs", params={"q": "  Standoff at the DISPUTED reef "}).json()
+    assert len(hits) == 1
+    assert [e["doc_id"] for e in hits[0]["evidence"]] == hits[0]["citations"]
+    assert hits[0]["evidence"][0]["rating"] == "B3"
+    # No match -> empty list (the frontend falls through to the live route).
+    assert client.get("/briefs", params={"q": "unrelated question"}).json() == []
+
+
 def test_brief_rejects_oversized_query(client: TestClient) -> None:
     r = client.post("/brief", json={"query": "x" * 5000})
     assert r.status_code == 422

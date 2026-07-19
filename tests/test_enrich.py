@@ -86,3 +86,30 @@ def test_entity_span_spans_all_mentions(session: Session, monkeypatch: pytest.Mo
     assert alpha.first_seen is not None and alpha.last_seen is not None
     assert alpha.first_seen.date() == early.date()  # earliest mention, not last-processed
     assert alpha.last_seen.date() == late.date()
+
+
+def test_run_survives_mixed_naive_and_aware_timestamps(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Collect-on-demand mixes persisted (SQLite-naive) and freshly-ingested (tz-aware)
+    publish times in one session; every datetime comparison in the pipeline must survive
+    it (regression: live crash 'can't compare offset-naive and offset-aware datetimes')."""
+    monkeypatch.setattr(enrich_mod, "embed_texts", _fake_embed)
+    session.add(Source(label="reuters.com", reliability="B"))
+    naive = datetime(2026, 6, 1, 12, 0)  # what SQLite hands back for a persisted row
+    aware = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)  # what a fresh GDELT ingest carries
+    session.add(
+        Document(doc_id="old", source="reuters.com", title="Alpha Command meets", published=naive)
+    )
+    session.add(
+        Document(doc_id="new", source="reuters.com", title="Alpha Command strikes", published=aware)
+    )
+    session.flush()
+
+    stats = enrich_mod.run(session)  # entity span + event clustering + narrative windows
+
+    assert stats["embedded"] == 2
+    alpha = next(e for e in session.query(Entity).all() if e.name == "Alpha Command")
+    assert alpha.first_seen is not None and alpha.last_seen is not None
+    assert alpha.first_seen.date() == naive.date()
+    assert alpha.last_seen.date() == aware.date()

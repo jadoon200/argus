@@ -431,9 +431,47 @@ def _brief_out(b: Brief, evidence: list[EvidenceOut] | None = None) -> BriefOut:
     )
 
 
+def _hydrate_citations(db: Session, b: Brief) -> list[EvidenceOut]:
+    """Rated evidence cards for a persisted brief's citations. Listings normally skip this
+    (evidence is a fresh-POST concern), but snapshot serving — precomputed briefs on the
+    model-less demo deploy — needs the full product, cards included."""
+    out: list[EvidenceOut] = []
+    for doc_id in b.citations or []:
+        doc = db.get(Document, doc_id)
+        if doc is None:
+            continue
+        src = db.get(Source, doc.source)
+        out.append(
+            _evidence_out(
+                EvidenceItem(
+                    doc_id=doc.doc_id,
+                    title=doc.title,
+                    source=doc.source,
+                    reliability=src.reliability if src else "F",
+                    credibility=doc.credibility,
+                    summary=doc.summary,
+                    published=doc.published.date().isoformat() if doc.published else None,
+                    url=doc.url,
+                )
+            )
+        )
+    return out
+
+
 @app.get("/briefs", response_model=list[BriefOut])
-def briefs(limit: int = 20, db: Session = Depends(get_db)) -> list[BriefOut]:
+def briefs(limit: int = 20, q: str | None = None, db: Session = Depends(get_db)) -> list[BriefOut]:
     limit = max(1, min(limit, 100))
+    if q:
+        # Snapshot lookup: newest persisted briefs whose query matches `q` (case- and
+        # whitespace-insensitive), with cited evidence hydrated so the dashboard can render
+        # the complete intelligence product without a live model.
+        norm = " ".join(q.lower().split())
+        matches = [
+            b
+            for b in db.scalars(select(Brief).order_by(Brief.created_at.desc())).all()
+            if " ".join(b.query.lower().split()) == norm
+        ][:limit]
+        return [_brief_out(b, _hydrate_citations(db, b)) for b in matches]
     rows = db.scalars(select(Brief).order_by(Brief.created_at.desc()).limit(limit)).all()
     return [_brief_out(b) for b in rows]
 

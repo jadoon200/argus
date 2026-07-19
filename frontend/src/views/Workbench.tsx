@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   api,
@@ -39,7 +39,7 @@ const STAGES: Record<Mode, string[]> = {
 
 type Msg =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "brief"; data: BriefOut }
+  | { id: number; role: "brief"; data: BriefOut; snapshot?: boolean }
   | { id: number; role: "evidence"; query: string; items: EvidenceOut[] }
   | { id: number; role: "error"; text: string };
 
@@ -118,7 +118,7 @@ function AchMatrix({ rows }: { rows: AchScore[] }) {
   );
 }
 
-function BriefCard({ b }: { b: BriefOut }) {
+function BriefCard({ b, snapshot }: { b: BriefOut; snapshot?: boolean }) {
   const [raw, setRaw] = useState(false);
 
   // Triage responses (help text / collection guidance) are chat messages, not intelligence
@@ -151,9 +151,26 @@ function BriefCard({ b }: { b: BriefOut }) {
               {b.mode === "panel" ? "deliberated" : "quick"}
             </span>
           )}
+          {snapshot && (
+            <span
+              className="backend-tag snapshot"
+              title="Precomputed with the full deliberation panel on a local model — not generated live by this deployment"
+            >
+              snapshot
+            </span>
+          )}
           {b.backend && <span className="backend-tag">{b.backend}</span>}
         </span>
       </div>
+
+      {snapshot && (
+        <p className="snapshot-note">
+          This is a <b>precomputed</b> full-panel brief, generated locally with{" "}
+          <code>{b.backend ?? "a local model"}</code> — this free deployment doesn't run a live
+          model, so free-typed questions get the deterministic cited digest instead. Run ARGUS
+          locally (Ollama, free) to watch the deliberation live.
+        </p>
+      )}
 
       {(b.mode_reason || (b.auto_collected ?? 0) > 0) && (
         <p className="muted" style={{ margin: "2px 0 10px", fontSize: 12 }}>
@@ -266,10 +283,28 @@ export function Workbench() {
   const idRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Shares the masthead's cache entry; tells us whether a real model backs /brief here.
+  // Until known, assume live — the snapshot path is a demo-deploy affordance, not a gate.
+  const model = useQuery({ queryKey: ["model"], queryFn: api.model, staleTime: 30_000 });
+  const liveModel = model.data ? model.data.active !== "template" : true;
+
   const brief = useMutation({
     mutationFn: ({ q, m }: { q: string; m: BriefMode }) => api.brief(q, m),
     onSuccess: (data) => setMessages((m) => [...m, { id: idRef.current++, role: "brief", data }]),
     onError: (e) => setMessages((m) => [...m, { id: idRef.current++, role: "error", text: (e as Error).message }]),
+  });
+  // Model-less deploy: serve a precomputed full-panel brief when one exists for the exact
+  // question; otherwise fall through to the live route (deterministic digest there).
+  const snapshot = useMutation({
+    mutationFn: (q: string) => api.briefLookup(q),
+    onSuccess: (rows, q) => {
+      if (rows.length > 0) {
+        setMessages((m) => [...m, { id: idRef.current++, role: "brief", data: rows[0], snapshot: true }]);
+      } else {
+        brief.mutate({ q, m: "auto" });
+      }
+    },
+    onError: (_e, q) => brief.mutate({ q, m: "auto" }),
   });
   const retrieve = useMutation({
     mutationFn: (q: string) => api.retrieve(q, 10),
@@ -277,7 +312,7 @@ export function Workbench() {
     onError: (e) => setMessages((m) => [...m, { id: idRef.current++, role: "error", text: (e as Error).message }]),
   });
 
-  const busy = brief.isPending || retrieve.isPending;
+  const busy = brief.isPending || retrieve.isPending || snapshot.isPending;
 
   useEffect(() => {
     // At rest (no thread yet) keep the masthead + hero in view; only follow the
@@ -292,6 +327,7 @@ export function Workbench() {
     setMessages((m) => [...m, { id: idRef.current++, role: "user", text: q }]);
     setInput("");
     if (mode === "evidence") retrieve.mutate(q);
+    else if (!liveModel) snapshot.mutate(q);
     else brief.mutate({ q, m: mode });
   }
 
@@ -317,13 +353,22 @@ export function Workbench() {
                 <button key={ex} onClick={() => send(ex)}>{ex}</button>
               ))}
             </div>
+            {!liveModel && (
+              <p className="demo-note">
+                This deployment runs <b>without a live model</b>: the example questions above
+                return <b>precomputed full-panel briefs</b> (marked “snapshot”), and free-typed
+                questions get the deterministic cited digest. To watch the multi-agent
+                deliberation live, run ARGUS locally with Ollama (free) — or point it at a
+                free-tier hosted model.
+              </p>
+            )}
           </div>
         )}
 
         {messages.map((m) => {
           if (m.role === "user") return <div key={m.id} className="msg-user">{m.text}</div>;
           if (m.role === "error") return <div key={m.id} className="error">{m.text}</div>;
-          if (m.role === "brief") return <div key={m.id} className="msg-argus"><BriefCard b={m.data} /></div>;
+          if (m.role === "brief") return <div key={m.id} className="msg-argus"><BriefCard b={m.data} snapshot={m.snapshot} /></div>;
           return (
             <div key={m.id} className="msg-argus">
               <p className="turn-q">Evidence for “{m.query}” — {m.items.length} rated items, best-matching first.</p>
