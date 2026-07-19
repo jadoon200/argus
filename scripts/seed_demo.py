@@ -15,8 +15,10 @@ image-build time (baked into the container) or against a mounted volume.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from argus.db.base import Base, get_session_factory, make_engine
 from argus.db.models import (
@@ -391,6 +393,19 @@ def _brief(now: datetime) -> Brief:
     )
 
 
+def _snapshot_briefs(now: datetime) -> list[Brief]:
+    """Precomputed full-panel briefs for the dashboard's example questions, generated
+    locally with a real model OVER THIS SAME SEED CORPUS (see export_seed_briefs.py) so
+    their citations resolve to seed doc ids. The model-less cloud deploy serves these via
+    the dashboard's snapshot path — honestly labelled, since the deploy can't produce a
+    deliberated product live. Missing file -> no snapshots, everything else still works."""
+    path = Path(__file__).with_name("seed_briefs.json")
+    if not path.exists():
+        return []
+    rows: list[dict[str, object]] = json.loads(path.read_text())
+    return [Brief(**row, created_at=now) for row in rows]  # type: ignore[arg-type]
+
+
 def seed() -> None:
     engine = make_engine()
     Base.metadata.drop_all(engine)
@@ -468,11 +483,14 @@ def seed() -> None:
         session.add_all(narratives)
         session.add_all(narr_docs)
         session.add(_brief(now))
+        snapshots = _snapshot_briefs(now)
+        session.add_all(snapshots)
         session.commit()
 
     print(
         f"seeded demo corpus: {len(docs)} documents across {len(TOPICS)} topics, "
-        f"{len(events)} events, {len(narratives)} narratives, 1 brief"
+        f"{len(events)} events, {len(narratives)} narratives, "
+        f"{1 + len(snapshots)} briefs ({len(snapshots)} model snapshots)"
     )
 
 
