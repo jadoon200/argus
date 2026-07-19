@@ -151,6 +151,9 @@ export const api = {
   contested: (limit = 20) => get<EventOut[]>(`/contested?limit=${limit}`),
   narratives: (limit = 50) => get<NarrativeOut[]>(`/narratives?limit=${limit}`),
   briefs: (limit = 20) => get<BriefOut[]>(`/briefs?limit=${limit}`),
+  /** Precomputed-brief lookup by exact question — the snapshot path for the model-less
+   *  demo deploy. Returns [] when no persisted brief matches. */
+  briefLookup: (q: string) => get<BriefOut[]>(`/briefs?q=${encodeURIComponent(q)}&limit=1`),
   retrieve: (query: string, k = 8) => post<EvidenceOut[]>("/retrieve", { query, k }),
   brief: (query: string, mode: BriefMode = "auto") => post<BriefOut>("/brief", { query, mode }),
   ingest: (query: string) => post<IngestResult>("/ingest", { query }),

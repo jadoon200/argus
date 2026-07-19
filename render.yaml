@@ -12,6 +12,14 @@ services:
     autoDeploy: true
     envVars:
       # Free + key-free by design (also baked into the image; set here for visibility).
+      # OPTIONAL live model at $0: Groq's free developer tier (no card) speaks the OpenAI
+      # API. To enable, change this to "openai" and set in the Render dashboard:
+      #   ARGUS_OPENAI_BASE_URL=https://api.groq.com/openai/v1
+      #   ARGUS_OPENAI_MODEL=llama-3.3-70b-versatile
+      #   ARGUS_OPENAI_API_KEY=<free key from console.groq.com>   (keep it a secret env var)
+      #   ARGUS_BRIEF_MODE=quick   (panel mode exceeds the free 12K tokens/min budget)
+      # See docs/DEPLOY.md "Live model on the free cloud deploy". Key absent/throttled →
+      # briefs degrade to the deterministic digest, never an error.
       - key: ARGUS_LLM_BACKEND
         value: template
       # Answer from the baked demo corpus rather than fetching + embedding on demand
