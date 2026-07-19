@@ -62,6 +62,28 @@ local Ollama (`ARGUS_LLM_BACKEND=ollama`, `ARGUS_OLLAMA_URL=...`) or any OpenAI-
 still key-free — and drop `ARGUS_AUTO_COLLECT=false` to re-enable collect-on-demand (needs the full
 image with the embedding model, not the slim API stack).
 
+### Live model on the free cloud deploy (Groq free tier, optional)
+
+The demo deploy can't run a local model (free-tier RAM), but Groq's developer tier is genuinely
+free (no card; verified 2026-07: `llama-3.3-70b-versatile` at 30 req/min, 1K req/day, 12K
+tokens/min, 100K tokens/day — enough for quick-mode briefs on a portfolio demo) and speaks the
+OpenAI API, so ARGUS's `openai` backend works as-is. On Render, set:
+
+```bash
+ARGUS_LLM_BACKEND=openai
+ARGUS_OPENAI_BASE_URL=https://api.groq.com/openai/v1
+ARGUS_OPENAI_MODEL=llama-3.3-70b-versatile
+ARGUS_OPENAI_API_KEY=<your free key from console.groq.com>
+ARGUS_BRIEF_MODE=quick   # panel mode burns ~30-40K tokens/brief; quick fits the TPM budget
+```
+
+Notes: the free tier is per-organization and can throttle mid-deliberation (12K TPM), which is
+why `quick` is the sensible deployed default — the router's panel escalation is a local-model
+luxury. If the key is absent or Groq errors, deliberation resilience degrades the brief to the
+deterministic digest rather than failing; the dashboard's snapshot path (precomputed full-panel
+briefs for the example questions) keeps working either way. Re-verify the tier before relying on
+it — free tiers change (see the snapshot path for the zero-dependency fallback).
+
 ## Larger / hardened deployments
 
 The dashboard API (`src/argus/api/app.py`) is read-only over the knowledge graph apart from one

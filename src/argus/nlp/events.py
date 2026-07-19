@@ -22,6 +22,18 @@ from argus.nlp.reliability import credibility_from_corroboration
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
+def as_utc(dt: datetime | None) -> datetime | None:
+    """Normalize a timestamp to tz-aware UTC (naive is treated as UTC).
+
+    SQLite round-trips `DateTime(timezone=True)` as naive, so a mid-session mix of
+    freshly-ingested (aware) and persisted (naive) timestamps — exactly what
+    collect-on-demand produces — crashes any comparison. Every pipeline that compares
+    document times must pass them through here first."""
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=UTC)
+
+
 def _normalize(v: NDArray[Any]) -> Vector:
     norm = float(np.linalg.norm(v))
     result = v / norm if norm else v
@@ -90,7 +102,7 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
     if not docs:
         return 0
     embeddings = np.asarray([d.embedding for d in docs], dtype=np.float32)
-    clusters = cluster_documents(embeddings, [d.published for d in docs], threshold, window)
+    clusters = cluster_documents(embeddings, [as_utc(d.published) for d in docs], threshold, window)
 
     session.execute(delete(EventDocument))
     session.execute(delete(Event))
@@ -100,7 +112,7 @@ def rebuild_events(session: Session, threshold: float, window: timedelta) -> int
         member_docs = [docs[i] for i in member_idx]
         doc_ids = [d.doc_id for d in member_docs]
         sources = {d.source for d in member_docs}
-        published = [d.published for d in member_docs if d.published]
+        published = [t for t in (as_utc(d.published) for d in member_docs) if t is not None]
         representative = member_docs[0]
         event_id = _event_id(doc_ids)
         # Contested-event signal: how divergently the member sources frame the same event.

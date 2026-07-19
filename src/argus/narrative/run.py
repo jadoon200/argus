@@ -23,6 +23,7 @@ from argus.narrative.cluster import cluster_narratives
 from argus.narrative.coordination import coordination_score
 from argus.nlp.disarm import DisarmMapper, default_mapper
 from argus.nlp.embed import Vector
+from argus.nlp.events import as_utc
 
 log = get_logger(__name__)
 
@@ -70,7 +71,7 @@ def rebuild_narratives(
     for member_idx in clusters:
         member_docs = [docs[i] for i in member_idx]
         doc_ids = [d.doc_id for d in member_docs]
-        times = [d.published for d in member_docs]
+        times = [as_utc(d.published) for d in member_docs]
         published = [t for t in times if t is not None]
         coordination = coordination_score(
             times, [reliability.get(d.source, "F") for d in member_docs], window

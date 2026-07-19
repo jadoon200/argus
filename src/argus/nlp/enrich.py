@@ -20,7 +20,7 @@ from argus.db.base import session_scope
 from argus.db.models import Document, DocumentEntity, Entity
 from argus.logging import configure_logging, get_logger
 from argus.nlp.embed import embed_texts
-from argus.nlp.events import rebuild_events
+from argus.nlp.events import as_utc, rebuild_events
 from argus.nlp.extract import entity_id, extract_entities
 
 log = get_logger(__name__)
@@ -54,11 +54,15 @@ def _extract_pending(session: Session, pending: list[Document]) -> int:
             # solely by the comparisons below.
             entity = session.merge(Entity(entity_id=eid, name=name, type=etype))
             entity.mentions = (entity.mentions or 0) + count
-            if doc.published is not None:
-                if entity.first_seen is None or doc.published < entity.first_seen:
-                    entity.first_seen = doc.published
-                if entity.last_seen is None or doc.published > entity.last_seen:
-                    entity.last_seen = doc.published
+            # as_utc on both sides: a persisted (SQLite-naive) span must compare cleanly
+            # against a freshly-ingested (aware) publish time mid-collect-on-demand.
+            pub = as_utc(doc.published)
+            if pub is not None:
+                first, last = as_utc(entity.first_seen), as_utc(entity.last_seen)
+                if first is None or pub < first:
+                    entity.first_seen = pub
+                if last is None or pub > last:
+                    entity.last_seen = pub
             session.merge(DocumentEntity(doc_id=doc.doc_id, entity_id=eid, count=count))
             edges += 1
     return edges
