@@ -42,11 +42,12 @@ def calibrate(confidences: list[str]) -> tuple[str, float]:
 
 def assured_confidence(
     state: DeliberationState, backend: LLMBackend, samples: int, temperature: float
-) -> tuple[str, float]:
+) -> tuple[str, float] | None:
     """Sample the adjudicator `samples` times and calibrate the confidence from agreement.
 
-    Falls back to whatever single draw succeeded (or the primary finding's value via the
-    caller) if the resamples don't parse — never worse than the one-shot behaviour.
+    Returns None when no resample parses (backend timeout, malformed JSON) so the caller
+    keeps the primary finding's confidence — assurance can refine a confidence call, never
+    replace a successful one with a fabricated "low" — never worse than one-shot behaviour.
     """
     prompt = nodes.adjudicator_prompt(state)
     confidences: list[str] = []
@@ -56,4 +57,6 @@ def assured_confidence(
         )
         if finding is not None and finding.key_judgments:
             confidences.append(finding.confidence)
+    if not confidences:
+        return None
     return calibrate(confidences)

@@ -218,6 +218,12 @@ def _content_tokens(text: str) -> set[str]:
     return {t for t in _TOKEN.findall((text or "").lower()) if t not in _STOPWORDS}
 
 
+def _is_generic(token: str) -> bool:
+    # Plural-tolerant: the registry lists mostly singular forms ("update"), but users type
+    # both ("any updates?") — a trailing-s variant of a generic word is still generic.
+    return token in _GENERIC or (token.endswith("s") and token[:-1] in _GENERIC)
+
+
 def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     """How many evidence items share a SUBJECT token with the query — the thin-coverage
     signal that triggers collect-on-demand (fewer relevant docs than the configured floor).
@@ -225,9 +231,12 @@ def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     Matches on the query's subject tokens (content words minus generic framing/time words), so
     a document isn't counted relevant just because it shares a word like "tensions" or "recent".
     """
-    q_tokens = _content_tokens(query) - _GENERIC
+    q_tokens = {t for t in _content_tokens(query) if not _is_generic(t)}
     if not q_tokens:
-        return 0  # no subject to match on (e.g. "what's the latest?") — can't assess relevance
+        # No subject to match on (e.g. "any updates?") — relevance is unknowable, not zero.
+        # Count everything so a conversational follow-up neither trips the no-reporting gate
+        # nor tasks collection on a subject-less query; empty evidence still counts 0.
+        return len(evidence)
     return sum(1 for e in evidence if q_tokens & _content_tokens(f"{e.title} {e.summary or ''}"))
 
 

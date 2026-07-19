@@ -50,7 +50,29 @@ class SeqAdjudicator:
 
 def test_assured_confidence_samples_and_calibrates() -> None:
     state = {"query": "q", "evidence": [], "hypotheses": ["H1"], "critiques": []}
-    conf, agreement = assured_confidence(
+    result = assured_confidence(
         state, SeqAdjudicator(["high", "moderate", "low"]), samples=3, temperature=0.4
     )
-    assert conf == "moderate" and agreement == 0.33  # wobbly panel -> downgraded from high
+    assert result == ("moderate", 0.33)  # wobbly panel -> downgraded from high
+
+
+class FailingAdjudicator:
+    """Never returns parseable JSON — models a backend timeout/hiccup on every resample."""
+
+    name = "fail"
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        response_schema: dict[str, Any] | None = None,
+        temperature: float | None = None,
+    ) -> str:
+        return "…backend produced no structured output…"
+
+
+def test_assured_confidence_all_resamples_fail_keeps_primary() -> None:
+    # When no resample parses, assurance must signal "unavailable" (None) so the caller
+    # keeps the primary panel's confidence — not overwrite a good call with "low".
+    state = {"query": "q", "evidence": [], "hypotheses": ["H1"], "critiques": []}
+    assert assured_confidence(state, FailingAdjudicator(), samples=3, temperature=0.4) is None
