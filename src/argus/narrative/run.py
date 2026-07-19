@@ -21,7 +21,7 @@ from argus.db.models import Document, Narrative, NarrativeDocument, Source
 from argus.logging import configure_logging, get_logger
 from argus.narrative.cluster import cluster_narratives
 from argus.narrative.coordination import coordination_score
-from argus.nlp.disarm import DisarmMapper
+from argus.nlp.disarm import DisarmMapper, default_mapper
 from argus.nlp.embed import Vector
 
 log = get_logger(__name__)
@@ -108,7 +108,9 @@ def refresh(session: Session) -> int:
         settings.narrative_threshold,
         settings.narrative_min_cluster_size,
         timedelta(hours=settings.coordination_window_hours),
-        mapper=DisarmMapper(),  # tag each narrative with DISARM techniques (real encoder)
+        # Process-wide cached mapper: refresh() runs on user-facing request paths
+        # (collect-on-demand, /ingest), so the DISARM catalog must embed once, not per call.
+        mapper=default_mapper(),
         disarm_top_k=settings.disarm_top_k,
         disarm_threshold=settings.disarm_threshold,
     )
