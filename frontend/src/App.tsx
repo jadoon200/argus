@@ -18,7 +18,14 @@ function EngineStatus() {
 }
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
+  // networkMode "always": the API is same-origin (or localhost in dev), so the browser's
+  // connectivity heuristic must not gate it — the default "online" mode silently PAUSES
+  // failed queries when the online-manager thinks the network is down, leaving every view
+  // blank with no error state ("connecting…" forever). Always fetch; let failures surface.
+  defaultOptions: {
+    queries: { staleTime: 60_000, retry: 1, networkMode: "always" },
+    mutations: { networkMode: "always" },
+  },
 });
 
 const TABS = [
