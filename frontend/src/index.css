@@ -110,6 +110,7 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
 /* --- evidence cards (rated OSINT) --- */
 .ev { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; }
 .ev.cyber { border-left: 3px solid var(--accent-2); }
+.ev.geoint { border-left: 3px solid #3aa8a0; } /* maritime teal — PHAROS's lane identity */
 .ev-top { display: flex; gap: 12px; align-items: flex-start; }
 .ev-body { flex: 1; min-width: 0; }
 .ev-title { font-size: 14px; margin-bottom: 3px; line-height: 1.4; }
@@ -133,6 +134,7 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
 .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin: 2px 5px 2px 0; }
 .badge.kind { border: 1px solid var(--border); color: var(--muted); }
 .badge.cyber { background: rgba(110,168,216,0.12); color: var(--accent-2); border: 1px solid rgba(110,168,216,0.3); }
+.badge.geoint { background: rgba(58,168,160,0.12); color: #3aa8a0; border: 1px solid rgba(58,168,160,0.3); }
 
 /* --- narratives --- */
 .narr { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }

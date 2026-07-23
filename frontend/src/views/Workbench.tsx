@@ -63,8 +63,9 @@ function Rating({ rating, reliability, credibility }: Pick<EvidenceOut, "rating"
 
 function EvidenceCard({ e }: { e: EvidenceOut }) {
   const cyber = e.doc_id.startsWith("sentinel-cyber:") || e.source === "sentinel-cyber";
+  const geoint = e.doc_id.startsWith("pharos-geoint:") || e.source === "pharos-geoint";
   return (
-    <article className={`ev${cyber ? " cyber" : ""}`}>
+    <article className={`ev${cyber ? " cyber" : ""}${geoint ? " geoint" : ""}`}>
       <div className="ev-top">
         <Rating rating={e.rating} reliability={e.reliability} credibility={e.credibility} />
         <div className="ev-body">
@@ -79,6 +80,7 @@ function EvidenceCard({ e }: { e: EvidenceOut }) {
             <span className="ev-src">{e.source}</span>
             {e.published && <span>{e.published.slice(0, 10)}</span>}
             {cyber && <span className="badge cyber">cyber-fusion</span>}
+            {geoint && <span className="badge geoint">geoint-fusion</span>}
           </div>
           {e.summary && <p className="ev-summary">{e.summary}</p>}
         </div>
