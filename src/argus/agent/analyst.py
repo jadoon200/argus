@@ -35,6 +35,7 @@ from argus.agent.triage import (
     no_reporting_brief,
     relevant_count,
 )
+from argus.bridge.geoint import geoint_evidence
 from argus.bridge.sentinel import cyber_evidence
 from argus.collection.ondemand import collect_for_query
 from argus.config import get_settings
@@ -431,10 +432,12 @@ def generate_brief(
             raise ValueError("generate_brief needs either `evidence` or a `session`")
 
         def _retrieve() -> list[EvidenceItem]:
-            # All-source fusion: append SENTINEL cyber campaigns *relevant to the query*
-            # when the bridge is on (no-op by default). Cyber items become citable evidence.
+            # All-source fusion: append SENTINEL cyber campaigns and the geospatial lanes'
+            # incidents (PHAROS maritime, HORUS air) *relevant to the query* when those
+            # bridges are on (all no-ops by default). Each becomes citable evidence like
+            # any document, carrying its own Admiralty rating.
             gathered = gather_evidence(session, query, settings.brief_context_docs)
-            return gathered + cyber_evidence(query=query)
+            return gathered + cyber_evidence(query=query) + geoint_evidence(query=query)
 
         evidence = _retrieve()
         # Collect-on-demand: thin/no relevant coverage -> fetch reporting for the question
