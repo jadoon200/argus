@@ -465,11 +465,19 @@ def briefs(limit: int = 20, q: str | None = None, db: Session = Depends(get_db))
         # Snapshot lookup: newest persisted briefs whose query matches `q` (case- and
         # whitespace-insensitive), with cited evidence hydrated so the dashboard can render
         # the complete intelligence product without a live model.
+        #
+        # MODEL-PRODUCED ONLY. POST /brief persists whatever it produced, so on the
+        # template-backed demo deploy a visitor's own free-typed question lands in this
+        # table as a template digest. Serving that back would label a live deterministic
+        # digest as a "precomputed full-panel brief" — false on every count. Snapshots are
+        # baked seed products from a real model, matching what export_seed_briefs.py emits.
         norm = " ".join(q.lower().split())
         matches = [
             b
             for b in db.scalars(select(Brief).order_by(Brief.created_at.desc())).all()
             if " ".join(b.query.lower().split()) == norm
+            and b.backend
+            and b.backend not in ("template", "triage")
         ][:limit]
         return [_brief_out(b, _hydrate_citations(db, b)) for b in matches]
     rows = db.scalars(select(Brief).order_by(Brief.created_at.desc()).limit(limit)).all()
