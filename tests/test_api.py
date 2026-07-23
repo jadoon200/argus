@@ -11,7 +11,7 @@ from argus.api.app import app, get_db
 from argus.api.limits import ConcurrencyLimiter, RateLimiter
 from argus.db import models  # noqa: F401
 from argus.db.base import Base
-from argus.db.models import Document, Source
+from argus.db.models import Brief, Document, Source
 
 
 @pytest.fixture
@@ -194,11 +194,27 @@ def test_brief_roundtrip_persists(client: TestClient) -> None:
     assert stored["key_assumptions"] == [] and stored["ach_ranking"] == []
 
 
+def _seed_snapshot_brief(client: TestClient, query: str) -> None:
+    """Insert a model-produced brief the way `seed_demo.py` bakes snapshots in."""
+    db = next(app.dependency_overrides[get_db]())
+    db.add(
+        Brief(
+            query=query,
+            body="KEY JUDGMENTS: ...",
+            key_judgments=["Vessels massed at the reef [E1]"],
+            citations=["reuters.com:1"],
+            confidence="moderate",
+            backend="ollama:qwen2.5:14b",
+        )
+    )
+    db.commit()
+
+
 def test_briefs_query_lookup_serves_snapshot_with_evidence(client: TestClient) -> None:
     """The snapshot path for the model-less demo deploy: an exact-question lookup on
     /briefs returns the persisted brief WITH cited evidence hydrated, so the dashboard
     can render the full product without running a model."""
-    client.post("/brief", json={"query": "standoff at the disputed reef"})
+    _seed_snapshot_brief(client, "standoff at the disputed reef")
     # Case/whitespace-insensitive match; hydrated evidence mirrors the citations.
     hits = client.get("/briefs", params={"q": "  Standoff at the DISPUTED reef "}).json()
     assert len(hits) == 1
@@ -206,6 +222,22 @@ def test_briefs_query_lookup_serves_snapshot_with_evidence(client: TestClient) -
     assert hits[0]["evidence"][0]["rating"] == "B3"
     # No match -> empty list (the frontend falls through to the live route).
     assert client.get("/briefs", params={"q": "unrelated question"}).json() == []
+
+
+def test_briefs_query_lookup_never_serves_a_template_digest_as_a_snapshot(
+    client: TestClient,
+) -> None:
+    """POST /brief persists whatever it produced, so on the template-backed demo deploy a
+    visitor's own free-typed question becomes a stored template digest. The snapshot
+    lookup must not hand that back — the dashboard would label a live deterministic digest
+    a 'precomputed full-panel brief'. Only real model products are snapshots."""
+    q = "standoff at the disputed reef"  # shares corpus tokens, so it really briefs
+    posted = client.post("/brief", json={"query": q})
+    assert posted.status_code == 200 and posted.json()["backend"] == "template"
+    # It is persisted and listable...
+    assert any(b["query"].lower() == q for b in client.get("/briefs").json())
+    # ...but invisible to the snapshot lookup, so the UI falls through to the live route.
+    assert client.get("/briefs", params={"q": q}).json() == []
 
 
 def test_brief_rejects_oversized_query(client: TestClient) -> None:
