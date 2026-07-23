@@ -138,6 +138,14 @@ class Settings(BaseSettings):
     # geopolitical one (~0.08) pulls none. 0 keeps the old query-agnostic top-salient behaviour.
     sentinel_relevance_min_score: float = 0.25
 
+    # --- Sibling bridges: geospatial lanes (read-only) --------------------------------
+    # Empty disables a lane. PHAROS (maritime) and HORUS (air) both serve
+    # /geoint/evidence already speaking EvidenceItem, so one client (bridge/geoint.py)
+    # validates + re-keys both; relevance is the deterministic triage subject-token gate
+    # (neither has a technique mapper to route through, unlike SENTINEL).
+    pharos_api_url: str = ""
+    horus_api_url: str = ""
+
     # --- API hardening for public deployment (safe local-dev defaults) ----------------
     api_allowed_origins: str = ""
     api_max_request_chars: int = 4_000
