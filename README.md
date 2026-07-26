@@ -2,20 +2,20 @@
 
 [![CI](https://github.com/jadoon200/argus/actions/workflows/ci.yml/badge.svg)](https://github.com/jadoon200/argus/actions/workflows/ci.yml)
 
-**All-source intelligence analyst workbench** — fuses the open-source *information*
-environment (global news + events + advisories) into source-rated, **cited intelligence
-briefs**, written by a **multi-agent ACH deliberation panel** and held to a measured
-evaluation bar.
+**All-source intelligence analyst workbench** — a deterministic supervisor gathers from
+**Sky** (HORUS), **Ocean** (PHAROS), **Cyber** (SENTINEL), and the open-source information
+environment, then a **multi-agent ACH deliberation panel** fuses the source-rated evidence
+into cited intelligence briefs held to a measured evaluation bar.
 
-> **Sibling to [SENTINEL](../sentinel).** Sentinel fuses the **cyber** threat picture
-> (network intrusions × ATT&CK × CTI). ARGUS fuses the **information** picture
-> (open-source reporting × entities/events × narratives × DISARM influence tactics)
-> and puts an **agentic analyst** on top. The two join: ARGUS can query Sentinel's cyber
-> knowledge graph so one analyst reasons across both — cyber + cognitive, the way an
-> all-source fusion cell actually works.
+> **Portfolio fusion point.** [HORUS](../horus) supplies the **Sky** picture (ADS-B and GNSS
+> interference), [PHAROS](../pharos) supplies the **Ocean** picture (AIS maritime awareness),
+> and [SENTINEL](../sentinel) supplies the **Cyber** picture (network intrusions × ATT&CK ×
+> CTI). ARGUS is the supervisor and synthesis layer: it selectively queries those read-only
+> systems alongside its own news corpus, preserving provenance and Admiralty ratings.
 
-> **Status:** agent spine, API, narrative watch, cyber-fusion bridge, and the React dashboard
-> all complete (plus DSPy prompt optimization and MLX LoRA fine-tuning).
+> **Status:** the lean fusion supervisor, Sky/Ocean/Cyber-OSINT workers, ACH agent spine,
+> API, overview/workbench dashboard, and narrative watch are complete (plus DSPy prompt
+> optimization and MLX LoRA fine-tuning).
 > What runs today and what's planned is tracked honestly in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md); every model/agent claim lands in
 > [`docs/EVAL.md`](docs/EVAL.md) with the number that survives scrutiny, not a demo cherry-pick.
@@ -29,7 +29,13 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
 2. **Structures** it — extracts entities and events, deduplicates near-identical reports,
    and rates each source on the **NATO Admiralty System** (source reliability A–F ×
    information credibility 1–6), so corroboration and provenance are first-class.
-3. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
+3. **Routes and gathers across domains** — a deterministic **fusion supervisor** classifies
+   the question and wakes only the relevant mini-agents: **Sky/HORUS**, **Ocean/PHAROS**,
+   **Cyber/SENTINEL**, with **OSINT** always the base lane. Workers make read-only HTTP calls,
+   relevance-filter, and return the existing rated `EvidenceItem` contract. They run no LLM;
+   the expensive reasoning still happens once, which keeps peak memory to one local model on
+   an M3 Pro. `ARGUS_FUSION_SUPERVISOR=false` restores the former flat broadcast for rollback.
+4. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
    judgment out using real intelligence tradecraft: a panel sets **competing hypotheses**, a
    lead **Analyst** makes the case, a **Red Team** attacks it (disconfirming evidence, weak
    sourcing, state-affiliated narratives), and an **Adjudicator** applies **Analysis of
@@ -40,22 +46,21 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    (fabricated citations are dropped, never shown). Built on LangGraph; runs **free** on a
    local Ollama model (Claude optional, never required), with a deterministic fallback so it
    always runs.
-4. **Watches narratives and tags influence tactics** — clusters reporting into narratives,
+5. **Watches narratives and tags influence tactics** — clusters reporting into narratives,
    flags **coordination** (synchronized messaging) and **influence-operations techniques**
    (DISARM Red Framework: deepfakes, conspiracy narratives, flooding, etc.), both information-defence
    signals (surfaced at `GET /narratives`). Also detects **contested-event framing divergence**
    across sources, especially across reliability tiers, surfacing contradictions at `GET /contested`
    — all human-review signals, never automated verdicts.
-5. **Closes the loop on collection** — a brief ends with gaps; the agent tasks the next
+6. **Closes the loop on collection** — a brief ends with gaps; the agent tasks the next
    collection by converting gaps into targeted open-source queries, ingests the results, and
    re-briefs on the expanded corpus (`make collect-loop`).
-6. **Fuses the cyber picture** — when pointed at the sibling **SENTINEL** knowledge graph
-   (`ARGUS_SENTINEL_API_URL`), pulls cyber campaigns in as citable evidence so one brief reasons
-   across open-source *and* cyber reporting (read-only; off by default). A campaign naming a
-   threat group is resolved to its **nation attribution** (`APT28 ⇄ Russia`; `GET /actors`) so
-   the cyber lane joins the geopolitical actor of the brief — attribution shown as contested,
-   human-review, never an automated verdict.
-7. **Speaks the standard** — exports the DISARM-keyed influence-ops graph as a conformant
+7. **Shows its work before synthesis** — `GET /overview` returns cached status, counts, and
+   the latest item for all four lanes; `POST /fusion/preview` exposes the supervisor decision,
+   per-lane counts, and fused evidence without an LLM. Every fresh brief also reports
+   `lanes_consulted` and the routing reason. A named cyber actor still resolves to its contested
+   open-reporting nation attribution (`APT28 ⇄ Russia`; `GET /actors`).
+8. **Speaks the standard** — exports the DISARM-keyed influence-ops graph as a conformant
    **STIX 2.1** bundle (`GET /stix`: techniques → `attack-pattern`, narratives → `report`,
    sources → `identity`), ingestible by OpenCTI / MISP / the ATT&CK Navigator and joinable with
    Sentinel's ATT&CK STIX in one object model — cyber + cognitive on the same standard.
@@ -91,30 +96,26 @@ an afterthought.
 ## Architecture
 
 ```
- ┌────────────────────────────┐        ┌────────────────────────────┐
- │ Layer 1 · Collection       │        │  bridge → SENTINEL cyber KG │
- │ GDELT global news + events │        │  read-only API:/campaigns,  │
- │ + curated world/agency RSS │◄──────►│  /techniques (reuse as-is)  │
- │           → one corpus     │        └──────────────┬─────────────┘
- └─────────────┬──────────────┘                       │
-               ▼                                       │
- ┌─────────────────────────────────────────────┐      │
- │ Layer 2 · Analysis                           │      │
- │  2a entities + events + Admiralty            │      │
- │     source-reliability scoring + retrieval   │      │
- │  2b narrative clustering + coordination  ✅  │      │
- │     ("narrative watch") → /narratives        │      │
- └─────────────┬───────────────────────────────┘      │
-               ▼                                       ▼
- ┌──────────────────────────────────────────────────────────┐
- │ Layer 3 · Analyst agent (pluggable LLM)                   │
- │  query → plan → retrieve(corpus + KG + cyber) → CITED brief│
- │  measured by the eval harness (citation/faithfulness/recall)│
- └─────────────┬────────────────────────────────────────────┘
-               ▼
-        FastAPI (hardened, read-only + 1 agent route)
-               ▼
-        React / TypeScript dashboard  ✅ workbench · narrative watch · collection
+                         analyst question
+                                │
+                  deterministic fusion supervisor
+                     route + explain (no model)
+          ┌─────────────┬─────────────┬─────────────┐
+          ▼             ▼             ▼             ▼
+     OSINT worker   Sky / HORUS   Ocean / PHAROS  Cyber / SENTINEL
+     corpus + GDELT  ADS-B + GNSS     AIS GEOINT       ATT&CK + CTI
+          └─────────────┴─────────────┴─────────────┘
+                                │
+                    fused list[EvidenceItem]
+                     ratings + provenance intact
+                                │
+                quick synthesis OR ACH deliberation
+              hypotheses → score → analyst ⇄ red team
+                         → adjudicator
+                                │
+                   cited, calibrated intelligence brief
+                                │
+        FastAPI → overview · workbench · narratives · collection
 ```
 
 ## Stack
@@ -137,7 +138,14 @@ make enrich                                         # entity/event extraction + 
 make brief Q="What happened in the South China Sea this week?"   # generate a cited brief
 make eval                                           # score the agent on the gold set
 make api          # read-only API + agent route on :8000
+
+# Exercise the live read-only Sky/Ocean/Cyber workers through the supervisor:
+make fusion-demo Q="Assess suspicious vessels in the Singapore Strait"
 ```
+
+For persistent local fusion settings, copy [`.env.example`](.env.example) to `.env`. The
+checked example points at the portfolio's live read-only sibling APIs; replace them with local
+URLs when running the four services together.
 
 Everything works with **no API key** (deterministic fallback). For best results, run a local
 model via Ollama (`ollama pull qwen2.5:14b`; `llama2` is too weak). To use Claude, set

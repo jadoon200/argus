@@ -138,8 +138,14 @@ class Settings(BaseSettings):
     # geopolitical one (~0.08) pulls none. 0 keeps the old query-agnostic top-salient behaviour.
     sentinel_relevance_min_score: float = 0.25
 
-    # --- Sibling bridges: geospatial lanes (read-only) --------------------------------
-    # Empty disables a lane. PHAROS (maritime) and HORUS (air) both serve
+    # --- Multi-agent fusion supervisor + sibling lanes (read-only) ---------------------
+    # Route each question only to the relevant domain workers. False restores the previous
+    # flat broadcast to every configured lane for A/B testing and instant rollback.
+    fusion_supervisor: bool = True
+    # Server-side overview fan-out is cached so opening the dashboard does not hammer the
+    # free-tier sibling services (or repeatedly wake a sleeping instance).
+    fusion_overview_cache_seconds: float = 60.0
+    # Empty disables a lane. PHAROS (Ocean) and HORUS (Sky) both serve
     # /geoint/evidence already speaking EvidenceItem, so one client (bridge/geoint.py)
     # validates + re-keys both; relevance is the deterministic triage subject-token gate
     # (neither has a technique mapper to route through, unlike SENTINEL).

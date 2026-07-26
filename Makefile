@@ -1,4 +1,8 @@
-.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives hydrate brief eval api ui
+.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives hydrate brief fusion-demo eval api ui
+
+FUSION_HORUS_URL ?= https://horus-kc7w.onrender.com
+FUSION_PHAROS_URL ?= https://pharos-0y6q.onrender.com
+FUSION_SENTINEL_URL ?= https://sentinel-92pf.onrender.com
 
 # One-time: create the conda env, then `conda activate argus`
 env:
@@ -54,6 +58,15 @@ hydrate:
 # Generate a cited intelligence brief for a question.
 #   make brief Q="What happened in the South China Sea this week?"
 brief:
+	python -m argus.agent.analyst "$(Q)"
+
+# Exercise the supervisor + live read-only sibling workers from local ARGUS.
+#   make fusion-demo Q="Assess suspicious vessels in the Singapore Strait"
+fusion-demo:
+	ARGUS_FUSION_SUPERVISOR=true \
+	ARGUS_HORUS_API_URL=$(FUSION_HORUS_URL) \
+	ARGUS_PHAROS_API_URL=$(FUSION_PHAROS_URL) \
+	ARGUS_SENTINEL_API_URL=$(FUSION_SENTINEL_URL) \
 	python -m argus.agent.analyst "$(Q)"
 
 # Closing-the-loop collection: brief -> gaps -> targeted queries -> ingest -> re-brief.

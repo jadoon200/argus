@@ -4,6 +4,7 @@ import { api } from "./api";
 import { Workbench } from "./views/Workbench";
 import { Narratives } from "./views/Narratives";
 import { Collection } from "./views/Collection";
+import { Overview } from "./views/Overview";
 
 function EngineStatus() {
   const { data, isError } = useQuery({ queryKey: ["model"], queryFn: api.model, staleTime: 30_000 });
@@ -29,6 +30,7 @@ const queryClient = new QueryClient({
 });
 
 const TABS = [
+  { id: "overview", label: "Fusion overview", sub: "Sky + Ocean + Cyber + OSINT" },
   { id: "ask", label: "Workbench", sub: "ask a question, get a cited brief" },
   { id: "narr", label: "Narrative watch", sub: "which framings are coordinated?" },
   { id: "coll", label: "Collection", sub: "what's in the corpus, how reliable?" },
@@ -36,7 +38,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["id"];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("ask");
+  const [tab, setTab] = useState<Tab>("overview");
   return (
     <QueryClientProvider client={queryClient}>
       <div className="shell">
@@ -68,6 +70,7 @@ export default function App() {
         </nav>
         {/* Keep every view mounted and toggle visibility — switching tabs must never wipe
             the chat thread or an in-flight brief (live-reported bug). */}
+        <div hidden={tab !== "overview"}><Overview /></div>
         <div hidden={tab !== "ask"}><Workbench /></div>
         <div hidden={tab !== "narr"}><Narratives /></div>
         <div hidden={tab !== "coll"}><Collection /></div>

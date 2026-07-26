@@ -1,7 +1,7 @@
 import httpx
 import respx
 
-from argus.bridge.geoint import GeointBridge, air_evidence, geoint_evidence, maritime_evidence
+from argus.bridge.geoint import GeointBridge, geoint_evidence, ocean_evidence, sky_evidence
 from argus.config import Settings
 
 # Mirrors PHAROS's real /geoint/evidence rows (pharos.geoint.to_evidence): EvidenceItem
@@ -61,28 +61,28 @@ def _mock_api(rows: object = None) -> None:
 
 def test_lanes_disabled_without_url() -> None:
     assert geoint_evidence(_settings(pharos_api_url="", horus_api_url="")) == []
-    assert maritime_evidence(_settings(pharos_api_url="")) == []
-    assert air_evidence(_settings(horus_api_url="")) == []
+    assert ocean_evidence(_settings(pharos_api_url="")) == []
+    assert sky_evidence(_settings(horus_api_url="")) == []
 
 
 @respx.mock
 def test_geoint_evidence_empty_when_unreachable() -> None:
     respx.get("http://pharos.test/health").mock(return_value=httpx.Response(503))
-    assert maritime_evidence(_settings(pharos_api_url="http://pharos.test")) == []
+    assert ocean_evidence(_settings(pharos_api_url="http://pharos.test")) == []
 
 
 @respx.mock
 def test_bridge_maps_real_geoint_schema_to_rated_evidence() -> None:
     _mock_api()
-    bridge = GeointBridge("http://pharos.test", "pharos-geoint")
+    bridge = GeointBridge("http://pharos.test", "ocean-geoint")
     assert bridge.available() is True
     items = bridge.incidents_as_evidence(limit=5)
     assert len(items) == 2
 
     gap = items[0]
     # Re-keyed like the cyber lane (sentinel-cyber:*) so the UI/citations can tag the lane.
-    assert gap.doc_id == "pharos-geoint:gap-563012345-20260701"
-    assert gap.source == "pharos-geoint"
+    assert gap.doc_id == "ocean-geoint:gap-563012345-20260701"
+    assert gap.source == "ocean-geoint"
     # PHAROS's Admiralty grades pass through untouched — the AIS-confidence rating IS the point.
     assert gap.reliability == "C" and gap.credibility == 3
     # The relative incident link is made absolute so a citation resolves outside PHAROS.
@@ -113,8 +113,8 @@ def test_bridge_survives_malformed_rows() -> None:
             },
         ]
     )
-    items = GeointBridge("http://pharos.test", "pharos-geoint").incidents_as_evidence(limit=5)
-    assert [i.doc_id for i in items] == ["pharos-geoint:ok-1"]
+    items = GeointBridge("http://pharos.test", "ocean-geoint").incidents_as_evidence(limit=5)
+    assert [i.doc_id for i in items] == ["ocean-geoint:ok-1"]
     ev = items[0]
     assert ev.reliability == "F" and ev.credibility is None and ev.url is None
 
@@ -129,24 +129,24 @@ def test_bridge_caps_results_client_side() -> None:
         ]
     )
     assert (
-        len(GeointBridge("http://pharos.test", "pharos-geoint").incidents_as_evidence(limit=5)) == 5
+        len(GeointBridge("http://pharos.test", "ocean-geoint").incidents_as_evidence(limit=5)) == 5
     )
 
 
 @respx.mock
 def test_query_relevance_keeps_maritime_drops_unrelated() -> None:
     _mock_api()
-    bridge = GeointBridge("http://pharos.test", "pharos-geoint")
+    bridge = GeointBridge("http://pharos.test", "ocean-geoint")
     # A maritime question shares subject tokens with the incident evidence ("ship" keeps
     # both the dark-ship gap and the ship-to-ship transfer — one shared token is enough).
     maritime = bridge.incidents_as_evidence(limit=5, query="dark ship in the Singapore Strait")
     assert [i.doc_id for i in maritime] == [
-        "pharos-geoint:gap-563012345-20260701",
-        "pharos-geoint:rdv-9-20260702",
+        "ocean-geoint:gap-563012345-20260701",
+        "ocean-geoint:rdv-9-20260702",
     ]
     # A narrower question about vessels going dark keeps only the gap incident.
     dark_only = bridge.incidents_as_evidence(limit=5, query="vessels going dark near Singapore")
-    assert [i.doc_id for i in dark_only] == ["pharos-geoint:gap-563012345-20260701"]
+    assert [i.doc_id for i in dark_only] == ["ocean-geoint:gap-563012345-20260701"]
     # A non-maritime question pulls no maritime evidence at all.
     assert bridge.incidents_as_evidence(limit=5, query="parliamentary election results") == []
 
@@ -155,13 +155,13 @@ def test_query_relevance_keeps_maritime_drops_unrelated() -> None:
 def test_subjectless_query_keeps_everything() -> None:
     # "any updates?" has no subject tokens — relevance is unknowable, not zero (triage contract).
     _mock_api()
-    items = GeointBridge("http://pharos.test", "pharos-geoint").incidents_as_evidence(
+    items = GeointBridge("http://pharos.test", "ocean-geoint").incidents_as_evidence(
         limit=5, query="any updates?"
     )
     assert len(items) == 2
 
 
-# --- the air lane (HORUS) — same contract, different source key ------------------------
+# --- the Sky lane (HORUS) — same contract, different source key ------------------------
 _AIR_EVIDENCE = [
     {
         "doc_id": "jam:2:207:14",
@@ -185,22 +185,22 @@ _AIR_EVIDENCE = [
 
 
 @respx.mock
-def test_air_lane_uses_the_same_client_with_its_own_key() -> None:
+def test_sky_lane_uses_the_same_client_with_its_own_key() -> None:
     respx.get("http://horus.test/health").mock(return_value=httpx.Response(200, json={}))
     respx.get("http://horus.test/geoint/evidence").mock(
         return_value=httpx.Response(200, json=_AIR_EVIDENCE)
     )
-    (item,) = air_evidence(_settings(horus_api_url="http://horus.test"))
+    (item,) = sky_evidence(_settings(horus_api_url="http://horus.test"))
     # Re-keyed by lane so citations stay unambiguous when lanes are fused.
-    assert item.doc_id == "horus-geoint:jam:2:207:14"
-    assert item.source == "horus-geoint"
+    assert item.doc_id == "sky-geoint:jam:2:207:14"
+    assert item.source == "sky-geoint"
     assert item.reliability == "C" and item.credibility == 2
     assert item.url == "http://horus.test/incidents/jam:2:207:14"
 
 
 @respx.mock
 def test_both_geospatial_lanes_fuse_into_one_evidence_set() -> None:
-    # The four-lane claim, minimally: one call returns maritime AND air evidence, each
+    # The four-lane claim, minimally: one call returns Ocean AND Sky evidence, each
     # carrying its own source rating and a distinct citable id.
     _mock_api()
     respx.get("http://horus.test/health").mock(return_value=httpx.Response(200, json={}))
@@ -211,7 +211,7 @@ def test_both_geospatial_lanes_fuse_into_one_evidence_set() -> None:
         _settings(pharos_api_url="http://pharos.test", horus_api_url="http://horus.test")
     )
     sources = {i.source for i in items}
-    assert sources == {"pharos-geoint", "horus-geoint"}
+    assert sources == {"ocean-geoint", "sky-geoint"}
     assert len({i.doc_id for i in items}) == len(items)  # no id collisions across lanes
 
 
@@ -223,4 +223,4 @@ def test_one_lane_down_never_suppresses_the_other() -> None:
     items = geoint_evidence(
         _settings(pharos_api_url="http://pharos.test", horus_api_url="http://horus.test")
     )
-    assert items and {i.source for i in items} == {"pharos-geoint"}
+    assert items and {i.source for i in items} == {"ocean-geoint"}

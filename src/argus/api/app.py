@@ -1,13 +1,15 @@
-"""ARGUS read-only knowledge-graph API + the hardened analyst /brief route.
+"""ARGUS knowledge-graph API + hardened collection, fusion, and analyst routes.
 
-Everything except POST /brief is read-only. /brief runs the (potentially expensive)
-multi-agent deliberation, so it carries the rate-limit + concurrency guards from
-limits.py. GET /model exposes the active inference backend so the model layer is
-observable, not hidden, in a deployment.
+The graph, fusion overview/preview, and retrieval routes are read-only; POST /ingest is the
+guarded collection write. /brief runs the (potentially expensive) multi-agent deliberation,
+so it carries the rate-limit + concurrency guards from limits.py. GET /model exposes the
+active inference backend so the model layer is observable, not hidden, in a deployment.
 """
 
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from threading import Lock
+from time import monotonic
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -21,6 +23,7 @@ from argus.actors import THREAT_ACTORS
 from argus.agent.analyst import gather_evidence, generate_brief, to_brief_row
 from argus.agent.llm import ollama_models, resolve_backend
 from argus.agent.state import EvidenceItem
+from argus.agent.workers import gather_fused_evidence, overview_statuses
 from argus.api.limits import ConcurrencyLimiter, RateLimiter, SlotUnavailable
 from argus.config import get_settings
 from argus.db.base import get_session_factory, init_sqlite_schema
@@ -165,6 +168,25 @@ class EvidenceOut(BaseModel):
     url: str | None
 
 
+class OverviewLaneOut(BaseModel):
+    lane: str
+    label: str
+    status: Literal["ready", "unreachable", "disabled"]
+    configured: bool
+    reachable: bool
+    count: int | None
+    count_label: str
+    last_item: EvidenceOut | None = None
+    detail: str | None = None
+
+
+class FusionPreviewOut(BaseModel):
+    lanes_consulted: list[str]
+    lane_reason: str
+    lane_counts: dict[str, int]
+    evidence: list[EvidenceOut]
+
+
 class AchScoreOut(BaseModel):
     hypothesis: str
     inconsistency: float  # reliability-weighted disconfirming evidence (lower = stronger)
@@ -195,6 +217,8 @@ class BriefOut(BaseModel):
     mode: str | None = None
     mode_reason: str | None = None
     auto_collected: int | None = None
+    lanes_consulted: list[str] = []
+    lane_reason: str | None = None
     body: str
     created_at: str | None
 
@@ -221,8 +245,17 @@ class RetrieveRequest(BaseModel):
     k: int = Field(default=8, ge=1, le=50)
 
 
+class FusionPreviewRequest(BaseModel):
+    query: str = Field(min_length=1)
+    k: int = Field(default=5, ge=1, le=20)
+
+
 class MapDisarmRequest(BaseModel):
     text: str = Field(min_length=1)
+
+
+_overview_cache_lock = Lock()
+_overview_cache: dict[int, tuple[float, list[OverviewLaneOut]]] = {}
 
 
 # --- read-only routes ----------------------------------------------------------------
@@ -410,6 +443,42 @@ def _evidence_out(e: EvidenceItem) -> EvidenceOut:
     )
 
 
+@app.get("/overview", response_model=list[OverviewLaneOut])
+def overview(db: Session = Depends(get_db)) -> list[OverviewLaneOut]:
+    """Cached server-side health/count/last-item view across OSINT, Sky, Ocean, and Cyber.
+
+    Sibling calls stay server-side so browser CORS and provenance boundaries remain intact.
+    The database engine identity isolates test/app instances while the TTL prevents repeated
+    dashboard opens from hammering free-tier services.
+    """
+    key = id(db.get_bind())
+    now = monotonic()
+    with _overview_cache_lock:
+        cached = _overview_cache.get(key)
+        if cached and now - cached[0] < settings.fusion_overview_cache_seconds:
+            return cached[1]
+
+    rows = [
+        OverviewLaneOut(
+            lane=status.lane,
+            label=status.label,
+            status=(
+                "ready" if status.reachable else "unreachable" if status.configured else "disabled"
+            ),
+            configured=status.configured,
+            reachable=status.reachable,
+            count=status.count,
+            count_label=status.count_label,
+            last_item=_evidence_out(status.last_item) if status.last_item else None,
+            detail=status.detail,
+        )
+        for status in overview_statuses(db, gather_evidence, settings)
+    ]
+    with _overview_cache_lock:
+        _overview_cache[key] = (now, rows)
+    return rows
+
+
 def _brief_out(b: Brief, evidence: list[EvidenceOut] | None = None) -> BriefOut:
     return BriefOut(
         brief_id=b.brief_id,
@@ -507,6 +576,31 @@ def retrieve(
     return [_evidence_out(e) for e in gather_evidence(db, payload.query, payload.k)]
 
 
+@app.post("/fusion/preview", response_model=FusionPreviewOut)
+def fusion_preview(
+    payload: FusionPreviewRequest, request: Request, db: Session = Depends(get_db)
+) -> FusionPreviewOut:
+    """Expose the supervisor's gather plan and source-rated fused evidence without an LLM."""
+    if len(payload.query) > settings.api_max_request_chars:
+        raise HTTPException(status_code=422, detail="query too long")
+    if not _rate_limiter.allow(request):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    gathered = gather_fused_evidence(
+        db,
+        payload.query,
+        payload.k,
+        gather_evidence,
+        settings,
+        lane_limit=payload.k,
+    )
+    return FusionPreviewOut(
+        lanes_consulted=list(gathered.lanes_consulted),
+        lane_reason=gathered.reason,
+        lane_counts={lane: count for lane, count in gathered.lane_counts.items()},
+        evidence=[_evidence_out(item) for item in gathered.evidence],
+    )
+
+
 # --- collection from the dashboard (guarded write) -----------------------------------
 @app.post("/ingest", response_model=IngestResult)
 def ingest(payload: IngestRequest, request: Request, db: Session = Depends(get_db)) -> IngestResult:
@@ -555,6 +649,8 @@ def create_brief(
         row.brief_id = 0
         out = _brief_out(row, [])
         out.auto_collected = result.auto_collected  # "collected N, still nothing relevant"
+        out.lanes_consulted = result.lanes_consulted
+        out.lane_reason = result.lane_reason
         return out
     db.add(row)
     db.commit()
@@ -569,6 +665,8 @@ def create_brief(
         result.mode_reason,
         result.auto_collected,
     )
+    out.lanes_consulted = result.lanes_consulted
+    out.lane_reason = result.lane_reason
     return out
 
 

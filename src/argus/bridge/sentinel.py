@@ -112,6 +112,15 @@ class SentinelBridge:
         # the cap client-side so an unbounded upstream can't balloon a /brief's work.
         return [r for r in rows if isinstance(r, dict)][:limit]
 
+    def stats(self) -> dict[str, Any] | None:
+        """SENTINEL summary counts for the cached ARGUS overview, or None on failure."""
+        try:
+            data = self._get("/stats")
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("sentinel_stats_failed", error=str(exc))
+            return None
+        return data if isinstance(data, dict) else None
+
     def _rank_by_relevance(
         self, campaigns: list[dict[str, Any]], query: str, min_score: float
     ) -> list[dict[str, Any]]:
