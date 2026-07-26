@@ -1,8 +1,8 @@
 # Roadmap
 
 Built honestly: a milestone is only ✅ when it runs and is tested. The agent spine (0–4), the
-FastAPI layer (5a), the React dashboard (5b), narrative watch (6), and the cyber-fusion bridge
-(7) are all complete; what remains is polish (8) and the deferred live deployment (9).
+FastAPI + React layers (5), narrative watch (6), cyber bridge (7), **Sky/Ocean/Cyber-OSINT
+supervisor fusion (7b)**, and the Render deployment (9) are complete; what remains is polish (8).
 Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 
 | # | Milestone | Status |
@@ -13,11 +13,12 @@ Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 | 3 | Analyst agent — **multi-agent ACH deliberation** (LangGraph): hypotheses → analyst ↔ red-team → adjudicator; free-by-default LLM (Ollama / deterministic), citation-resolvable **cited brief** | ✅ done |
 | 4 | Eval harness — gold query set; retrieval recall/MRR, citation coverage, fabrication-caught, calibration-trap (deterministic) | ✅ done |
 | 5a | FastAPI (`/brief` + read-only graph, hardened: rate-limit/concurrency/size-cap guards; `GET /model` observability) | ✅ done |
-| 5b | React / TypeScript dashboard — workbench (query → rated evidence + cited brief with Admiralty badges), narrative-watch panel, collection (corpus/source-reliability/backend) | ✅ done |
+| 5b | React / TypeScript dashboard — fusion overview + gather preview, workbench (query → rated evidence + cited brief with Admiralty badges), narrative-watch panel, collection | ✅ done |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch") + `/narratives` API | ✅ done |
 | 7 | Cyber-fusion bridge — SENTINEL cyber campaigns as citable evidence (read-only, `ARGUS_SENTINEL_API_URL`) | ✅ done |
+| 7b | **Lean multi-agent source fusion** — deterministic supervisor routes to OSINT + selected Sky/HORUS, Ocean/PHAROS, Cyber/SENTINEL workers; one central synthesis; transparent `lanes_consulted`; cached `/overview` | ✅ done |
 | 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
-| 9 | **Live deployment** — deferred; the dashboard (5b) has landed, so this is the next major step when chosen | ⬜ deferred |
+| 9 | **Live deployment** — one-service Render app; live sibling URLs wired read-only; health/evidence paths smoke-tested | ✅ done |
 
 Beyond the numbered spine, the "tune to our purpose" track is also done: domain-specialized
 agent personas (Key Assumptions Check + Indicators & Warnings), **DSPy** prompt optimization
@@ -51,9 +52,18 @@ OpenCTI / MISP / the ATT&CK Navigator and joinable with SENTINEL's ATT&CK STIX i
 nation attribution (`APT28 ⇄ Russia`), annotated onto the cyber-fusion evidence so the cyber lane joins the geopolitical
 actor of the brief; attribution shown as contested, open-reporting consensus, human-review — never an automated verdict.
 
-**Recommended floor to ship:** milestones 0–7 are done — the full open-source + cyber-fusion
-story runs end-to-end today, with the React dashboard on top. What's left is polish (8) and the
-deferred live deployment (9) — neither imminent.
+**Multi-domain source-agent fusion** (`src/argus/agent/{supervisor,workers}.py`) promotes the
+existing bridges into first-class workers. A lexical, deterministic supervisor always includes
+OSINT and selectively dispatches Sky, Ocean, and Cyber; subject-less follow-ups conservatively
+fan out. Workers gather in the shared `EvidenceItem` contract and preserve Admiralty ratings,
+while the existing quick/ACH paths remain the only synthesis brain. This avoids loading multiple
+models on the M3 Pro. The old flat broadcast remains available via
+`ARGUS_FUSION_SUPERVISOR=false`. `/overview` caches server-side health/count/last-item fan-out;
+`/fusion/preview` makes routing and gathered evidence visible without an LLM.
+
+**Recommended floor to ship:** milestones 0–7b and 9 are done — the full OSINT + Sky + Ocean +
+Cyber fusion story runs end-to-end through the supervisor and React dashboard. What remains is
+portfolio polish (8), not a missing product path.
 
 ## Design decisions already locked
 

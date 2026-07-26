@@ -8,6 +8,8 @@ def test_defaults_are_zero_cost_safe() -> None:
     assert s.llm_backend == "auto"
     # Sibling cyber bridge is off unless explicitly pointed at SENTINEL.
     assert s.sentinel_api_url == ""
+    assert s.horus_api_url == "" and s.pharos_api_url == ""
+    assert s.fusion_supervisor is True
     # Curated feeds are present and keyed by provenance label.
     assert "bbc-world" in s.rss_feeds
 
@@ -15,6 +17,10 @@ def test_defaults_are_zero_cost_safe() -> None:
 def test_env_prefix_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("ARGUS_LLM_BACKEND", "template")
     monkeypatch.setenv("ARGUS_GDELT_MAX_RECORDS", "10")
+    monkeypatch.setenv("ARGUS_FUSION_SUPERVISOR", "false")
+    monkeypatch.setenv("ARGUS_PHAROS_API_URL", "http://pharos.test")
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.llm_backend == "template"
     assert s.gdelt_max_records == 10
+    assert s.fusion_supervisor is False
+    assert s.pharos_api_url == "http://pharos.test"

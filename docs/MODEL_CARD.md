@@ -7,9 +7,10 @@
 ## Overview
 
 ARGUS is an **all-source open-source-intelligence (OSINT) analysis aid**. Its central artifact
-is a **cited intelligence brief**: given an analyst query, a **multi-agent deliberation panel**
-(LangGraph) retrieves over a corpus of open-source reporting (GDELT global news + curated RSS)
-and argues the judgment out using real intelligence tradecraft — competing hypotheses,
+is a **cited intelligence brief**: given an analyst query, a deterministic supervisor gathers
+from OSINT plus relevant **Sky/HORUS, Ocean/PHAROS, and Cyber/SENTINEL** workers, then a
+**multi-agent deliberation panel** (LangGraph) argues the fused evidence using real intelligence
+tradecraft — competing hypotheses,
 analyst ↔ red-team debate, ACH adjudication (favour the least-disconfirmed hypothesis), and
 IC estimative language (ICD 203 / Sherman Kent) — to produce a structured assessment: key
 judgments, a confidence call, the most credible alternative, intelligence gaps, and inline
@@ -39,7 +40,20 @@ It is **decision support for a human analyst**, not an autonomous decision-maker
 - **GDELT DOC 2.0 API** — global news index, free, no key. Public news metadata + snippets.
 - **Curated world/agency RSS** — wire services, broadcasters, government advisories; each tagged
   with its publisher for provenance.
+- **Read-only sibling APIs** — HORUS ADS-B/GNSS-interference incidents (Sky), PHAROS AIS
+  incidents (Ocean), and SENTINEL campaigns/ATT&CK mappings (Cyber). Each worker re-keys the
+  source id but preserves the upstream Admiralty rating and citable URL.
 - Coverage and language skew (English-heavy) are real limitations — see Limitations.
+
+## Domain-source agents
+
+The domain workers are retrieval agents, not independent generators. The supervisor uses
+transparent keyword profiles to select lanes; workers fetch and relevance-filter deterministically
+and return the shared `EvidenceItem` type. One central quick pass or ACH panel performs synthesis.
+This lean design keeps peak local memory to one model on the M3 Pro and avoids multiplying panel
+latency by the number of domains. Fresh API responses expose `lanes_consulted` and the route
+reason; `/fusion/preview` exposes the same gather without a model. The former flat gather remains
+behind `ARGUS_FUSION_SUPERVISOR=false` for rollback.
 
 ## Source-reliability model
 
@@ -125,12 +139,23 @@ strict one. On the reef judgment that scored 0.00 strict, decomposition separate
 entailment 0.98) from the ungrounded inference ("a show of force rather than direct confrontation", 0.00) for an honest **0.50**. Caveat: the
 red-team `Critiques` step timed out on 5/10 queries under local-model latency, so some briefs ran on a degraded panel. Full record in [`docs/EVAL.md`](EVAL.md).
 
+The deterministic source-domain router is separately measured on a six-query labelled set:
+lane precision **1.00**, recall **1.00**, and exact-set match **6/6**. This is a small regression
+set, not an open-domain semantic-routing claim; the lexical limitation is recorded below and in
+the evaluation document.
+
 ## Limitations & failure modes (committed up front)
 
 - **Language/coverage skew** — English-language, well-indexed sources dominate; under-reported
   regions and non-English reporting are under-retrieved.
 - **Open-source ceiling** — only sees public reporting; absence of evidence ≠ evidence of
   absence.
+- **Lexical lane routing** — the supervisor is explainable and free but may miss indirect domain
+  language or over-route an ambiguous term. Subject-less queries conservatively consult every
+  lane. Workers still relevance-filter their returns, and the flat-gather rollback is retained.
+- **Sibling freshness/availability** — a sleeping or unreachable free-tier sibling silently
+  contributes no evidence. `/overview` surfaces reachability, but an empty lane must never be
+  read as evidence that no incident exists.
 - **Confidence on thin sourcing** — the known trap; the eval gold set deliberately includes
   thin-source topics to check the agent says "low confidence + intelligence gap" rather than
   overstating. Result: TBD.

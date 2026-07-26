@@ -16,6 +16,7 @@ from argus.agent.analyst import generate_brief
 from argus.agent.llm import LLMBackend, resolve_backend
 from argus.agent.state import evidence_labels
 from argus.config import get_settings
+from argus.eval.fusion import evaluate_routing
 from argus.eval.goldset import QUERIES, corpus_retrieved, evidence_by_id
 from argus.eval.judge import judge_brief
 from argus.eval.metrics import (
@@ -168,6 +169,15 @@ def _results_table(reports: list[QueryReport]) -> list[str]:
             f"- **mean NLI citation support (strict whole-judgment entailment, experimental)**: "
             f"{_mean(scs):.2f}",
         ]
+    routing = evaluate_routing()
+    lines += [
+        f"- **fusion lane-routing precision ({routing.cases}-query labelled set)**: "
+        f"{routing.precision:.2f}",
+        f"- **fusion lane-routing recall ({routing.cases}-query labelled set)**: "
+        f"{routing.recall:.2f}",
+        f"- **fusion lane-routing exact match ({routing.cases}-query labelled set)**: "
+        f"{routing.exact_match:.2f}",
+    ]
     return lines
 
 

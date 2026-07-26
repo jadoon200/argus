@@ -64,6 +64,8 @@ def test_auto_mode_routes_and_reports(client: TestClient) -> None:
     body = r.json()
     assert body["mode"] == "quick"  # descriptive question -> single pass
     assert body["mode_reason"] and "single pass" in body["mode_reason"]
+    assert body["lanes_consulted"] == ["osint", "ocean"]
+    assert body["lane_reason"] and "ocean matched" in body["lane_reason"]
 
 
 def test_auto_mode_escalates_attribution_questions(client: TestClient) -> None:
@@ -170,6 +172,28 @@ def test_stats_and_sources(client: TestClient) -> None:
     assert stats["documents"] == 1 and stats["sources"] == 1
     sources = client.get("/sources").json()
     assert sources[0]["reliability"] == "B"
+
+
+def test_fusion_overview_exposes_all_four_lanes(client: TestClient) -> None:
+    rows = client.get("/overview").json()
+    assert [row["lane"] for row in rows] == ["osint", "sky", "ocean", "cyber"]
+    osint = rows[0]
+    assert osint["status"] == "ready" and osint["count"] == 1
+    assert osint["last_item"]["doc_id"] == "reuters.com:1"
+    # The test settings deliberately leave sibling URLs empty: visible disabled state,
+    # not a false green light or a failed endpoint.
+    assert all(row["status"] == "disabled" for row in rows[1:])
+
+
+def test_fusion_preview_routes_and_gathers_without_an_llm(client: TestClient) -> None:
+    r = client.post(
+        "/fusion/preview", json={"query": "Assess vessels near the disputed reef", "k": 3}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["lanes_consulted"] == ["osint", "ocean"]
+    assert body["lane_counts"] == {"osint": 1, "ocean": 0}
+    assert [item["doc_id"] for item in body["evidence"]] == ["reuters.com:1"]
 
 
 def test_brief_roundtrip_persists(client: TestClient) -> None:

@@ -61,13 +61,14 @@ function Rating({ rating, reliability, credibility }: Pick<EvidenceOut, "rating"
   );
 }
 
-function EvidenceCard({ e }: { e: EvidenceOut }) {
+export function EvidenceCard({ e }: { e: EvidenceOut }) {
   const cyber = e.doc_id.startsWith("sentinel-cyber:") || e.source === "sentinel-cyber";
-  const geoint = e.source === "pharos-geoint" || e.source === "horus-geoint" ||
-    e.doc_id.startsWith("pharos-geoint:") || e.doc_id.startsWith("horus-geoint:");
-  const geointLabel = e.source === "horus-geoint" || e.doc_id.startsWith("horus-geoint:") ? "air" : "maritime";
+  const sky = e.source === "sky-geoint" || e.doc_id.startsWith("sky-geoint:");
+  const ocean = e.source === "ocean-geoint" || e.doc_id.startsWith("ocean-geoint:");
+  const geoint = sky || ocean;
+  const geointLabel = sky ? "sky" : "ocean";
   return (
-    <article className={`ev${cyber ? " cyber" : ""}${geoint ? " geoint" : ""}`}>
+    <article className={`ev${cyber ? " cyber" : ""}${geoint ? ` geoint ${geointLabel}` : ""}`}>
       <div className="ev-top">
         <Rating rating={e.rating} reliability={e.reliability} credibility={e.credibility} />
         <div className="ev-body">
@@ -82,7 +83,7 @@ function EvidenceCard({ e }: { e: EvidenceOut }) {
             <span className="ev-src">{e.source}</span>
             {e.published && <span>{e.published.slice(0, 10)}</span>}
             {cyber && <span className="badge cyber">cyber-fusion</span>}
-            {geoint && <span className="badge geoint">{geointLabel}-fusion</span>}
+            {geoint && <span className={`badge geoint ${geointLabel}`}>{geointLabel}-fusion</span>}
           </div>
           {e.summary && <p className="ev-summary">{e.summary}</p>}
         </div>
@@ -176,10 +177,12 @@ function BriefCard({ b, snapshot }: { b: BriefOut; snapshot?: boolean }) {
         </p>
       )}
 
-      {(b.mode_reason || (b.auto_collected ?? 0) > 0) && (
+      {(b.mode_reason || b.lane_reason || b.lanes_consulted.length > 0 || (b.auto_collected ?? 0) > 0) && (
         <p className="muted" style={{ margin: "2px 0 10px", fontSize: 12 }}>
           {(b.auto_collected ?? 0) > 0 && <>auto-collected {b.auto_collected} fresh documents · </>}
-          {b.mode_reason && <>routed: {b.mode_reason}</>}
+          {b.lanes_consulted.length > 0 && <>lanes: {b.lanes_consulted.join(" + ")} · </>}
+          {b.lane_reason && <>fusion: {b.lane_reason} · </>}
+          {b.mode_reason && <>effort: {b.mode_reason}</>}
         </p>
       )}
 

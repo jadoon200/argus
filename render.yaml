@@ -26,6 +26,16 @@ services:
       # (the slim image ships no embedding model).
       - key: ARGUS_AUTO_COLLECT
         value: "false"
+      # Lean all-source fusion: deterministic supervisor → selected domain workers → one
+      # central synthesis. Each sibling is read-only and degrades to silence if unavailable.
+      - key: ARGUS_FUSION_SUPERVISOR
+        value: "true"
+      - key: ARGUS_HORUS_API_URL
+        value: https://horus-kc7w.onrender.com
+      - key: ARGUS_PHAROS_API_URL
+        value: https://pharos-0y6q.onrender.com
+      - key: ARGUS_SENTINEL_API_URL
+        value: https://sentinel-92pf.onrender.com
       # Render terminates TLS and sets X-Forwarded-For, so rate-limit per real client IP.
       - key: ARGUS_API_TRUST_FORWARDED_HEADER
         value: "true"

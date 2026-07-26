@@ -85,6 +85,10 @@ class BriefResult:
     mode: str | None = None
     mode_reason: str | None = None
     auto_collected: int | None = None
+    # Domain-routing transparency (fresh retrieval only): workers actually consulted and
+    # the deterministic supervisor's explanation. Metadata only; never persisted.
+    lanes_consulted: list[str] = field(default_factory=list)
+    lane_reason: str | None = None
 
 
 class DeliberationState(TypedDict, total=False):
