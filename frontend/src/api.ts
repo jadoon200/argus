@@ -93,6 +93,9 @@ export interface BriefOut {
   mode?: string | null;
   mode_reason?: string | null;
   auto_collected?: number | null;
+  /** Domain workers actually consulted by the deterministic fusion supervisor. */
+  lanes_consulted: string[];
+  lane_reason?: string | null;
   body: string;
   created_at: string | null;
 }
@@ -108,6 +111,25 @@ export interface EvidenceOut {
   summary: string | null;
   published: string | null;
   url: string | null;
+}
+
+export interface OverviewLaneOut {
+  lane: string;
+  label: string;
+  status: "ready" | "unreachable" | "disabled";
+  configured: boolean;
+  reachable: boolean;
+  count: number | null;
+  count_label: string;
+  last_item: EvidenceOut | null;
+  detail: string | null;
+}
+
+export interface FusionPreviewOut {
+  lanes_consulted: string[];
+  lane_reason: string;
+  lane_counts: Record<string, number>;
+  evidence: EvidenceOut[];
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -146,6 +168,7 @@ export const api = {
   health: () => get<Health>("/health"),
   model: () => get<ModelInfo>("/model"),
   stats: () => get<Stats>("/stats"),
+  overview: () => get<OverviewLaneOut[]>("/overview"),
   sources: () => get<SourceOut[]>("/sources"),
   events: (limit = 50) => get<EventOut[]>(`/events?limit=${limit}`),
   contested: (limit = 20) => get<EventOut[]>(`/contested?limit=${limit}`),
@@ -155,6 +178,8 @@ export const api = {
    *  demo deploy. Returns [] when no persisted brief matches. */
   briefLookup: (q: string) => get<BriefOut[]>(`/briefs?q=${encodeURIComponent(q)}&limit=1`),
   retrieve: (query: string, k = 8) => post<EvidenceOut[]>("/retrieve", { query, k }),
+  fusionPreview: (query: string, k = 5) =>
+    post<FusionPreviewOut>("/fusion/preview", { query, k }),
   brief: (query: string, mode: BriefMode = "auto") => post<BriefOut>("/brief", { query, mode }),
   ingest: (query: string) => post<IngestResult>("/ingest", { query }),
 };

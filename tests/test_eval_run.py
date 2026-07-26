@@ -39,6 +39,8 @@ def test_render_report_has_aggregates() -> None:
     assert "mean recall@3" in md
     assert "fabrication attempts caught" in md
     assert "calibration trap breaches" in md
+    assert "fusion lane-routing precision" in md
+    assert "fusion lane-routing exact match" in md
 
 
 def test_update_eval_doc_replaces_only_the_managed_block(tmp_path: Path) -> None:

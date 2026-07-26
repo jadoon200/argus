@@ -2,8 +2,9 @@
 
 > **Status: deploy-ready.** The whole app ships as one free container — FastAPI serves the built
 > React dashboard from the same origin as the API, on a SQLite file, with the deterministic
-> template engine (no API key, no cost). The hardening notes further down apply to any larger
-> deployment.
+> template engine (no API key, no cost). The Render blueprint also wires the three read-only
+> sibling intelligence APIs for Sky/Ocean/Cyber fusion. The hardening notes further down apply
+> to any larger deployment.
 
 ## Free one-service deploy (recommended)
 
@@ -39,6 +40,27 @@ idle, then a ~30-60s cold start — is neutralised for free by a scheduled keep-
    [`keep-alive` workflow](../.github/workflows/keepalive.yml) then pings `/health` every ~10 min on
    GitHub's free Actions minutes, so the service never sleeps. (A free uptime monitor such as
    UptimeRobot or cron-job.org does the same job if you'd rather not run a workflow.)
+
+### Multi-agent fusion wiring
+
+`render.yaml` enables the deterministic supervisor and points each worker at the portfolio's
+live, read-only sibling API:
+
+```bash
+ARGUS_FUSION_SUPERVISOR=true
+ARGUS_HORUS_API_URL=https://horus-kc7w.onrender.com
+ARGUS_PHAROS_API_URL=https://pharos-0y6q.onrender.com
+ARGUS_SENTINEL_API_URL=https://sentinel-92pf.onrender.com
+```
+
+No credentials or writes cross these links. A failed or sleeping sibling contributes no
+evidence and never fails the brief; `/overview` reports it unreachable. The overview fan-out is
+cached for 60 seconds (`ARGUS_FUSION_OVERVIEW_CACHE_SECONDS`) so tab opens do not hammer the
+free services. A first request can still miss a cold sibling—the next request sees it after the
+instance wakes. `ARGUS_FUSION_SUPERVISOR=false` restores the previous flat all-lanes gather.
+
+For local development, copy [`.env.example`](../.env.example) to `.env`, or run a one-off live
+source smoke through `make fusion-demo Q="..."`.
 
 ### Hugging Face Spaces (needs PRO as of 2026)
 
@@ -108,6 +130,11 @@ is the primary defence.
 | `ARGUS_API_INFERENCE_CONCURRENCY` | `2` | Hard cap on simultaneous brief generations; bounds peak RAM/CPU and concurrent LLM calls. Excess requests wait, then `503`. |
 | `ARGUS_API_INFERENCE_ACQUIRE_TIMEOUT_SECONDS` | `15` | How long a request waits for a free slot before `503`. |
 | `ARGUS_LLM_BACKEND` | `auto` | `auto` (local Ollama if reachable, else deterministic template — **never** auto-selects the paid Claude), `ollama`, `mlx` (Apple-Silicon local), `openai` (any OpenAI-compatible server; free when local), `anthropic` (opt-in, needs `ANTHROPIC_API_KEY`), or `template`. In a public deploy, pin `template` or a local backend so a traffic spike can't run up an API bill. |
+| `ARGUS_FUSION_SUPERVISOR` | `true` | Route to OSINT plus only relevant Sky/Ocean/Cyber workers. `false` broadcasts to all configured lanes for rollback/A-B comparison. |
+| `ARGUS_HORUS_API_URL` | `""` | Read-only Sky worker base URL; empty disables the lane. |
+| `ARGUS_PHAROS_API_URL` | `""` | Read-only Ocean worker base URL; empty disables the lane. |
+| `ARGUS_SENTINEL_API_URL` | `""` | Read-only Cyber worker base URL; empty disables the lane. |
+| `ARGUS_FUSION_OVERVIEW_CACHE_SECONDS` | `60` | TTL for server-side sibling status/count/last-item fan-out. |
 
 The rate limiter and concurrency cap are **single-process, in-memory**. With multiple workers
 each gets its own counters — fine for a small deployment; for real limits put them at the proxy.
@@ -121,8 +148,8 @@ each gets its own counters — fine for a small deployment; for real limits put 
 - **Don't expose the dev server.** Run uvicorn behind the proxy with a sane worker count
   (`uvicorn ... --workers N`), not bound to a public interface.
 - **Database** — Postgres stays on a private network; never expose it. Secrets via env only.
-- **Sentinel bridge** — `ARGUS_SENTINEL_API_URL` should point at Sentinel's read-only API on a
-  private network. ARGUS only ever reads from it.
+- **Sibling bridges** — prefer private-network URLs in a hardened deployment. The public demo
+  uses the siblings' public read-only APIs; ARGUS never writes to HORUS, PHAROS, or SENTINEL.
 
 ## Minimal prod env example
 
