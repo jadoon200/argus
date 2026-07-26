@@ -185,6 +185,34 @@ def test_fusion_overview_exposes_all_four_lanes(client: TestClient) -> None:
     assert all(row["status"] == "disabled" for row in rows[1:])
 
 
+def test_overview_caches_an_unreachable_lane_only_briefly(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A configured-but-unreachable lane (usually a cold free-tier sibling) must not be pinned
+    'down' for the full cache TTL — it is cached with the short retry TTL so the next open
+    self-heals once the fan-out has woken the sibling."""
+    from argus.agent.workers import WorkerStatus
+    from argus.api import app as appmod
+
+    def _fake_statuses(_session: object, _gatherer: object, _settings: object = None) -> list:
+        return [
+            WorkerStatus("osint", "OSINT", True, True, 1, "documents"),
+            WorkerStatus("sky", "Sky", True, False, None, "incidents"),  # configured, unreachable
+            WorkerStatus("ocean", "Ocean", False, False, None, "incidents"),
+            WorkerStatus("cyber", "Cyber", False, False, None, "campaigns"),
+        ]
+
+    monkeypatch.setattr(appmod, "overview_statuses", _fake_statuses)
+    appmod._overview_cache.clear()
+
+    rows = client.get("/overview").json()
+    assert next(r for r in rows if r["lane"] == "sky")["status"] == "unreachable"
+    # The cache flag drives the short retry TTL (not the full 60 s), so it self-heals.
+    (_cached_at, _rows, all_reachable) = next(iter(appmod._overview_cache.values()))
+    assert all_reachable is False
+    appmod._overview_cache.clear()
+
+
 def test_fusion_preview_routes_and_gathers_without_an_llm(client: TestClient) -> None:
     r = client.post(
         "/fusion/preview", json={"query": "Assess vessels near the disputed reef", "k": 3}
