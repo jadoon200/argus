@@ -1,6 +1,6 @@
-"""GEOINT-fusion bridge — read-only client for the sibling geospatial lanes.
+"""GEOINT-fusion bridge — read-only client for the Sky and Ocean sibling lanes.
 
-The third and fourth lanes of the all-source join. PHAROS (maritime) and HORUS (air) both
+The third and fourth lanes of the all-source join. PHAROS (Ocean) and HORUS (Sky) both
 expose `GET /geoint/evidence`, and both already shape each incident to ARGUS's
 `EvidenceItem` fields (doc_id / title / source / reliability A-F / credibility 1-6 /
 summary / published / url). Because that contract is identical by design, one client serves
@@ -8,7 +8,7 @@ both: this bridge validates and re-keys rather than translates, and adding a fur
 geospatial sibling is a URL plus a source key.
 
 So a brief can reason across open-source reporting, the cyber picture (SENTINEL), the
-maritime picture (PHAROS) and the air picture (HORUS) at once — each item carrying its own
+Ocean picture (PHAROS) and the Sky picture (HORUS) at once — each item carrying its own
 source rating. ARGUS only ever READS; each sibling stays the system of record for its lane.
 Disabled (returns nothing) when the URL is unset or the API is unreachable, so a bridge
 never breaks a brief.
@@ -54,7 +54,7 @@ def _as_reliability(value: Any) -> str:
 class GeointBridge:
     """Read-only client for a sibling that serves ARGUS-shaped GEOINT evidence.
 
-    `source_key` labels the lane ("pharos-geoint", "horus-geoint"); it prefixes every doc_id
+    `source_key` labels the lane ("ocean-geoint", "sky-geoint"); it prefixes every doc_id
     so citations stay unambiguous across lanes and the dashboard can tag their origin.
     """
 
@@ -86,6 +86,15 @@ class GeointBridge:
         # Siblings honour `limit` server-side (score-ordered, riskiest first), but cap
         # client-side too so a misbehaving upstream can't balloon a /brief's work.
         return [r for r in data if isinstance(r, dict)][:limit]
+
+    def stats(self) -> dict[str, Any] | None:
+        """Sibling summary counts for the cached ARGUS overview, or None when unavailable."""
+        try:
+            data = self._get("/stats")
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("geoint_stats_failed", source=self._source, error=str(exc))
+            return None
+        return data if isinstance(data, dict) else None
 
     def _to_item(self, row: dict[str, Any]) -> EvidenceItem | None:
         doc_id = str(row.get("doc_id") or "").strip()
@@ -136,25 +145,25 @@ def _lane_evidence(
     return bridge.incidents_as_evidence(limit, query=query)
 
 
-def maritime_evidence(
+def ocean_evidence(
     settings: Settings | None = None, limit: int = 5, query: str | None = None
 ) -> list[EvidenceItem]:
-    """PHAROS maritime incidents relevant to `query`, or [] when that bridge is off."""
+    """PHAROS Ocean incidents relevant to `query`, or [] when that bridge is off."""
     s = settings or get_settings()
-    return _lane_evidence(s.pharos_api_url, "pharos-geoint", s, limit, query)
+    return _lane_evidence(s.pharos_api_url, "ocean-geoint", s, limit, query)
 
 
-def air_evidence(
+def sky_evidence(
     settings: Settings | None = None, limit: int = 5, query: str | None = None
 ) -> list[EvidenceItem]:
-    """HORUS air-domain incidents relevant to `query`, or [] when that bridge is off."""
+    """HORUS Sky incidents relevant to `query`, or [] when that bridge is off."""
     s = settings or get_settings()
-    return _lane_evidence(s.horus_api_url, "horus-geoint", s, limit, query)
+    return _lane_evidence(s.horus_api_url, "sky-geoint", s, limit, query)
 
 
 def geoint_evidence(
     settings: Settings | None = None, limit: int = 5, query: str | None = None
 ) -> list[EvidenceItem]:
-    """Every configured geospatial lane's evidence for `query` (maritime + air)."""
+    """Every configured geospatial lane's evidence for `query` (Ocean + Sky)."""
     s = settings or get_settings()
-    return maritime_evidence(s, limit, query) + air_evidence(s, limit, query)
+    return ocean_evidence(s, limit, query) + sky_evidence(s, limit, query)

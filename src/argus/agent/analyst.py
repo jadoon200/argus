@@ -35,8 +35,7 @@ from argus.agent.triage import (
     no_reporting_brief,
     relevant_count,
 )
-from argus.bridge.geoint import geoint_evidence
-from argus.bridge.sentinel import cyber_evidence
+from argus.agent.workers import gather_fused_evidence
 from argus.collection.ondemand import collect_for_query
 from argus.config import get_settings
 from argus.db.base import session_scope
@@ -409,7 +408,7 @@ def generate_brief(
     *,
     session: Session | None = None,
     evidence: list[EvidenceItem] | None = None,
-    backend: LLMBackend | None | object = _AUTO,
+    backend: LLMBackend | object | None = _AUTO,
     persist: bool = True,
     mode: str | None = None,
 ) -> BriefResult:
@@ -427,17 +426,33 @@ def generate_brief(
 
     settings = get_settings()
     auto_collected: int | None = None
+    lanes_consulted: list[str] = []
+    lane_reason: str | None = None
     if evidence is None:
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
 
         def _retrieve() -> list[EvidenceItem]:
-            # All-source fusion: append SENTINEL cyber campaigns and the geospatial lanes'
-            # incidents (PHAROS maritime, HORUS air) *relevant to the query* when those
-            # bridges are on (all no-ops by default). Each becomes citable evidence like
-            # any document, carrying its own Admiralty rating.
-            gathered = gather_evidence(session, query, settings.brief_context_docs)
-            return gathered + cyber_evidence(query=query) + geoint_evidence(query=query)
+            nonlocal lanes_consulted, lane_reason
+            # Lean multi-agent fusion: the deterministic supervisor dispatches only the
+            # relevant OSINT / Sky / Ocean / Cyber workers. They gather rated EvidenceItems;
+            # the existing quick/panel path remains the one central synthesis brain.
+            gathered = gather_fused_evidence(
+                session,
+                query,
+                settings.brief_context_docs,
+                gather_evidence,
+                settings,
+            )
+            lanes_consulted = list(gathered.lanes_consulted)
+            lane_reason = gathered.reason
+            log.info(
+                "fusion_routed",
+                lanes=lanes_consulted,
+                reason=lane_reason,
+                counts=gathered.lane_counts,
+            )
+            return gathered.evidence
 
         evidence = _retrieve()
         # Collect-on-demand: thin/no relevant coverage -> fetch reporting for the question
@@ -457,6 +472,8 @@ def generate_brief(
             result = no_reporting_brief(query, n_docs, collection_enabled=settings.auto_collect)
             result.evidence = []
             result.auto_collected = auto_collected
+            result.lanes_consulted = lanes_consulted
+            result.lane_reason = lane_reason
             log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
             return result
 
@@ -492,6 +509,8 @@ def generate_brief(
     result.mode = mode
     result.mode_reason = mode_reason
     result.auto_collected = auto_collected
+    result.lanes_consulted = lanes_consulted
+    result.lane_reason = lane_reason
 
     # Reliability-gated calibration: enforce in code the confidence the sourcing warrants,
     # rather than trust the model not to over-read a lone low-reliability source.
@@ -523,6 +542,10 @@ def render(result: BriefResult) -> str:
     ]
     lines += [f"  • {kj}" for kj in (result.key_judgments or ["(none)"])]
     lines += ["", f"CONFIDENCE: {result.confidence or 'n/a'}"]
+    if result.lanes_consulted:
+        lines += [f"LANES: {', '.join(result.lanes_consulted)}"]
+        if result.lane_reason:
+            lines += [f"  ({result.lane_reason})"]
     if result.confidence_note:
         lines += [f"  ({result.confidence_note})"]
     if result.ach_ranking:

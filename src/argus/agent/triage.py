@@ -163,8 +163,9 @@ def capabilities_brief(query: str) -> BriefResult:
         "calibrated confidence, key assumptions, indicators & warnings, and gaps.\n"
         "- Watch narratives - clusters coordinated messaging, flags contested events, and "
         "tags influence-operations techniques (DISARM framework).\n"
-        "- Fuse the cyber picture - joins SENTINEL cyber campaigns (ATT&CK) into a brief "
-        "as citable evidence, with threat-actor -> nation attribution.\n\n"
+        "- Fuse every source domain - a deterministic supervisor routes the question to "
+        "OSINT plus the relevant Sky/HORUS, Ocean/PHAROS, and Cyber/SENTINEL workers; "
+        "each returns citable, source-rated evidence before one central synthesis.\n\n"
         "Try: ingest a topic in the Collection view, then ask something like "
         '"What is driving tensions in the South China Sea?"'
     )
@@ -224,6 +225,16 @@ def _is_generic(token: str) -> bool:
     return token in _GENERIC or (token.endswith("s") and token[:-1] in _GENERIC)
 
 
+def subject_tokens(text: str) -> set[str]:
+    """Content-bearing subject tokens used by deterministic relevance and lane routing.
+
+    Keeping this extraction public gives the fusion supervisor the exact same definition of
+    "subject-less" as query triage, so conversational follow-ups consistently fan out rather
+    than being mistaken for an unrelated query.
+    """
+    return {token for token in _content_tokens(text) if not _is_generic(token)}
+
+
 def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     """How many evidence items share a SUBJECT token with the query — the thin-coverage
     signal that triggers collect-on-demand (fewer relevant docs than the configured floor).
@@ -231,7 +242,7 @@ def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     Matches on the query's subject tokens (content words minus generic framing/time words), so
     a document isn't counted relevant just because it shares a word like "tensions" or "recent".
     """
-    q_tokens = {t for t in _content_tokens(query) if not _is_generic(t)}
+    q_tokens = subject_tokens(query)
     if not q_tokens:
         # No subject to match on (e.g. "any updates?") — relevance is unknowable, not zero.
         # Count everything so a conversational follow-up neither trips the no-reporting gate

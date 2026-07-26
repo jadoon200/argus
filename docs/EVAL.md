@@ -58,7 +58,44 @@ content, not just a label.
 |---|---|
 | Reliability ↔ later-contradiction correlation | TBD |
 
-### 5. Backend parity
+### 5. Fusion lane routing
+
+The source-domain supervisor is deterministic, so it has its own labelled set independent of
+brief quality. `src/argus/eval/fusion.py` covers six query shapes: Ocean, Sky, Cyber, a
+Sky+Ocean hybrid, OSINT-only politics, and a subject-less follow-up that must conservatively fan
+out. We measure micro precision/recall over lane labels plus exact-set match per query.
+
+| Metric | Result |
+|---|---|
+| Lane-selection precision | **1.00 (6-query labelled v1 set)** |
+| Lane-selection recall | **1.00 (6-query labelled v1 set)** |
+| Exact lane-set match | **1.00 (6/6)** |
+
+This is a deliberately small regression set, not proof of open-domain semantic routing. It is
+executable (`evaluate_routing()`), included in `make eval`, and paired with mocked integration
+tests proving an Ocean query does not wake Sky/Cyber and a Cyber query does not wake Sky/Ocean.
+The rollback flag (`ARGUS_FUSION_SUPERVISOR=false`) is also tested to consult all lanes and
+de-duplicate their evidence.
+
+**Live source-path smoke (2026-07-26):** all three sibling `/health` endpoints returned OK;
+PHAROS `/stats` reported 7 Ocean incidents and returned citable `/geoint/evidence`; HORUS
+reported 10 Sky incidents and returned citable `/geoint/evidence`; SENTINEL reported 2 Cyber
+campaigns. This verifies the read-only source APIs and contracts. The mocked suite remains the
+repeatable gate because live free-tier services can sleep or change data.
+
+The same smoke ran through a seeded local ARGUS API and React dashboard against those live
+siblings. Ocean-, Sky-, and Cyber-shaped questions each selected only OSINT plus the expected
+domain lane; the deterministic brief path interleaved the sibling results with OSINT and cited
+their absolute source links. The browser pass also verified the four ready overview cards,
+pre-synthesis gather preview, Admiralty badges, and visible lane-routing rationale.
+
+**Recorded limitation:** v1 routing is lexical by design—free, instant, and explainable, but it
+can miss an indirect domain reference or over-route an ambiguous term. Subject-less queries
+intentionally broadcast to every lane, sacrificing precision to avoid a false negative when
+conversation context is unavailable. The current 1.00 is therefore reported only on the six
+labelled query shapes, not as a general semantic-routing claim.
+
+### 6. Backend parity
 The deterministic fallback and the Claude-backed agent are scored on the **same** gold set, so
 the cost of running key-free is explicit and honest.
 

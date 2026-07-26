@@ -110,7 +110,8 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
 /* --- evidence cards (rated OSINT) --- */
 .ev { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; }
 .ev.cyber { border-left: 3px solid var(--accent-2); }
-.ev.geoint { border-left: 3px solid #3aa8a0; } /* maritime teal — PHAROS's lane identity */
+.ev.geoint.ocean { border-left: 3px solid #3aa8a0; } /* Ocean teal — PHAROS */
+.ev.geoint.sky { border-left: 3px solid #8c9eff; } /* Sky indigo — HORUS */
 .ev-top { display: flex; gap: 12px; align-items: flex-start; }
 .ev-body { flex: 1; min-width: 0; }
 .ev-title { font-size: 14px; margin-bottom: 3px; line-height: 1.4; }
@@ -135,6 +136,36 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
 .badge.kind { border: 1px solid var(--border); color: var(--muted); }
 .badge.cyber { background: rgba(110,168,216,0.12); color: var(--accent-2); border: 1px solid rgba(110,168,216,0.3); }
 .badge.geoint { background: rgba(58,168,160,0.12); color: #3aa8a0; border: 1px solid rgba(58,168,160,0.3); }
+.badge.geoint.sky { background: rgba(140,158,255,0.12); color: #a7b4ff; border-color: rgba(140,158,255,0.3); }
+
+/* --- multi-agent fusion overview --- */
+.lane-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.lane-card { background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 12px; padding: 15px 16px; min-width: 0; }
+.lane-card.sky { border-top-color: #8c9eff; }
+.lane-card.ocean { border-top-color: #3aa8a0; }
+.lane-card.cyber { border-top-color: var(--accent-2); }
+.lane-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.lane-head h3 { font-size: 14px; font-weight: 550; margin: 3px 0 0; }
+.lane-key { color: var(--hint); font: 10px "SF Mono", monospace; text-transform: uppercase; letter-spacing: 0.08em; }
+.lane-state { display: inline-flex; gap: 6px; align-items: center; color: var(--hint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.lane-state span { width: 7px; height: 7px; border-radius: 50%; background: var(--hint); }
+.lane-state.ready { color: var(--good); } .lane-state.ready span { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.lane-state.unreachable { color: var(--bad); } .lane-state.unreachable span { background: var(--bad); }
+.lane-card > p { color: var(--muted); font-size: 12px; min-height: 38px; line-height: 1.5; }
+.lane-count { display: flex; align-items: baseline; gap: 7px; margin: 12px 0; }
+.lane-count strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.lane-count span { color: var(--hint); font-size: 11px; }
+.lane-last { border-top: 1px solid var(--border); padding-top: 10px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.lane-last > span { display: block; color: var(--hint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+.lane-last a { color: var(--muted); text-decoration: none; }
+.lane-last a:hover { color: var(--accent); }
+.fusion-preview { margin-top: 4px; }
+.preview-result { margin-top: 16px; }
+.lane-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lane-chip { font: 11px "SF Mono", monospace; color: var(--accent); background: rgba(210,162,76,0.1); border: 1px solid rgba(210,162,76,0.3); border-radius: 6px; padding: 4px 8px; }
+.lane-chip.sky { color: #a7b4ff; border-color: rgba(140,158,255,0.3); background: rgba(140,158,255,0.1); }
+.lane-chip.ocean { color: #3aa8a0; border-color: rgba(58,168,160,0.3); background: rgba(58,168,160,0.1); }
+.lane-chip.cyber { color: var(--accent-2); border-color: rgba(110,168,216,0.3); background: rgba(110,168,216,0.1); }
 
 /* --- narratives --- */
 .narr { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
@@ -255,6 +286,7 @@ button.primary:hover:not(:disabled) { background: rgba(210,162,76,0.22); }
   .shell { padding: 16px 15px 60px; }
   .masthead h1 { font-size: 20px; letter-spacing: 0.22em; padding-left: 0.22em; }
   .tagline { font-size: 12.5px; }
+  .lane-grid { grid-template-columns: 1fr; }
   /* tabs: scroll horizontally rather than squash or wrap awkwardly */
   .tabs { justify-content: flex-start; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
