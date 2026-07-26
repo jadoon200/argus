@@ -28,10 +28,17 @@ COPY --from=web /web/dist ./frontend/dist
 ENV ARGUS_DATABASE_URL=sqlite:////app/data/argus.db
 RUN mkdir -p /app/data && python scripts/seed_demo.py
 
-# Free-demo posture: template engine (no key, no cost) and answer from the baked corpus
-# rather than fetching + embedding on demand (the slim image has no embedding model).
+# Free-demo posture: template engine (no key, no cost), answer from the baked corpus
+# rather than fetching + embedding on demand (the slim image has no embedding model), and
+# consult the portfolio's public read-only source-domain services. Render's env configuration
+# can override any value; baking the defaults also covers direct Docker deploys and services
+# whose Blueprint environment has not been re-synchronised.
 ENV ARGUS_LLM_BACKEND=template \
     ARGUS_AUTO_COLLECT=false \
+    ARGUS_FUSION_SUPERVISOR=true \
+    ARGUS_HORUS_API_URL=https://horus-kc7w.onrender.com \
+    ARGUS_PHAROS_API_URL=https://pharos-0y6q.onrender.com \
+    ARGUS_SENTINEL_API_URL=https://sentinel-92pf.onrender.com \
     ARGUS_API_TRUST_FORWARDED_HEADER=true \
     PORT=8000
 EXPOSE 8000
