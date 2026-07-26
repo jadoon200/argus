@@ -31,10 +31,16 @@ Give it an analyst question — an actor, a region, an event, a timeframe — an
    information credibility 1–6), so corroboration and provenance are first-class.
 3. **Routes and gathers across domains** — a deterministic **fusion supervisor** classifies
    the question and wakes only the relevant mini-agents: **Sky/HORUS**, **Ocean/PHAROS**,
-   **Cyber/SENTINEL**, with **OSINT** always the base lane. Workers make read-only HTTP calls,
-   relevance-filter, and return the existing rated `EvidenceItem` contract. They run no LLM;
-   the expensive reasoning still happens once, which keeps peak memory to one local model on
-   an M3 Pro. `ARGUS_FUSION_SUPERVISOR=false` restores the former flat broadcast for rollback.
+   **Cyber/SENTINEL**, and **OSINT**. Generic domain requests fuse OSINT with the matching
+   sibling (`ocean overview` → OSINT + PHAROS); explicitly naming sources constrains the gather
+   to exactly those systems (`from PHAROS` → PHAROS only). Broad domain synonyms keep relevant
+   news in the fused side (`ocean` matches sea/maritime reporting), and thin OSINT coverage can
+   trigger collect-on-demand. Workers make read-only HTTP calls, relevance-filter, collapse
+   repeated same-source detector observations into one evidence episode, and return the existing
+   rated `EvidenceItem` contract. Different sources remain separate as corroboration. They run
+   no LLM; the expensive reasoning still happens once, which keeps peak memory to one local model
+   on an M3 Pro.
+   `ARGUS_FUSION_SUPERVISOR=false` restores the former flat broadcast for rollback.
 4. **Deliberates a brief** — not a one-shot RAG summary. A **multi-agent panel** argues the
    judgment out using real intelligence tradecraft: a panel sets **competing hypotheses**, a
    lead **Analyst** makes the case, a **Red Team** attacks it (disconfirming evidence, weak

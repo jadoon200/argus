@@ -32,6 +32,11 @@ ROUTING_CASES: tuple[RoutingCase, ...] = (
         "What did the governing coalition decide after the election?", frozenset({"osint"})
     ),
     RoutingCase("Any updates?", frozenset({"osint", "sky", "ocean", "cyber"})),
+    RoutingCase("Give me an overview of the ocean from PHAROS", frozenset({"ocean"})),
+    RoutingCase("Give me an overview of the sky from HORUS", frozenset({"sky"})),
+    RoutingCase("Summarize cyber threats from SENTINEL", frozenset({"cyber"})),
+    RoutingCase("Assess the disputed reef using OSINT", frozenset({"osint"})),
+    RoutingCase("Compare PHAROS with SENTINEL", frozenset({"ocean", "cyber"})),
 )
 
 
