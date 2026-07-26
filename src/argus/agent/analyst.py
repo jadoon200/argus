@@ -408,7 +408,7 @@ def generate_brief(
     *,
     session: Session | None = None,
     evidence: list[EvidenceItem] | None = None,
-    backend: LLMBackend | None | object = _AUTO,
+    backend: LLMBackend | object | None = _AUTO,
     persist: bool = True,
     mode: str | None = None,
 ) -> BriefResult:
