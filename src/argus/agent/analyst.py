@@ -25,12 +25,12 @@ from argus.agent.state import (
     BriefResult,
     DeliberationState,
     EvidenceItem,
+    deduplicate_evidence,
     evidence_labels,
     format_evidence,
 )
 from argus.agent.triage import (
     capabilities_brief,
-    has_relevant_evidence,
     is_meta_query,
     no_reporting_brief,
     relevant_count,
@@ -137,7 +137,28 @@ def gather_evidence(
                 embedding=doc.embedding,  # carried for divergence-based effort routing
             )
         )
-    return items
+    # Hybrid search always has a least-irrelevant result. Do not expose that noise through
+    # /retrieve or the OSINT worker: retain only items with a real subject-token overlap.
+    # Subject-less follow-ups keep everything by the triage contract.
+    return [item for item in items if relevant_count(query, [item]) > 0]
+
+
+_SIBLING_EVIDENCE_SOURCES = frozenset({"sky-geoint", "ocean-geoint", "sentinel-cyber"})
+
+
+def _fused_relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
+    """Coverage count after supervisor routing.
+
+    A routed sibling may deliberately return its top salient incidents for a domain-level or
+    source-scoped question whose wording does not overlap a specific incident title. Those
+    items are relevant by the supervisor/worker contract even when the generic OSINT token gate
+    cannot see the relationship (for example, ``from PHAROS`` vs an ``AIS spoofing`` card).
+    """
+    return sum(
+        1
+        for item in evidence
+        if item.source in _SIBLING_EVIDENCE_SOURCES or relevant_count(query, [item]) > 0
+    )
 
 
 def _match_header(line: str) -> str | None:
@@ -428,12 +449,13 @@ def generate_brief(
     auto_collected: int | None = None
     lanes_consulted: list[str] = []
     lane_reason: str | None = None
+    lane_counts: dict[str, int] = {}
     if evidence is None:
         if session is None:
             raise ValueError("generate_brief needs either `evidence` or a `session`")
 
         def _retrieve() -> list[EvidenceItem]:
-            nonlocal lanes_consulted, lane_reason
+            nonlocal lane_counts, lane_reason, lanes_consulted
             # Lean multi-agent fusion: the deterministic supervisor dispatches only the
             # relevant OSINT / Sky / Ocean / Cyber workers. They gather rated EvidenceItems;
             # the existing quick/panel path remains the one central synthesis brain.
@@ -446,6 +468,7 @@ def generate_brief(
             )
             lanes_consulted = list(gathered.lanes_consulted)
             lane_reason = gathered.reason
+            lane_counts = {str(lane): count for lane, count in gathered.lane_counts.items()}
             log.info(
                 "fusion_routed",
                 lanes=lanes_consulted,
@@ -459,7 +482,8 @@ def generate_brief(
         # inline (the corpus is a cache, not a prerequisite), then retrieve again.
         if (
             settings.auto_collect
-            and relevant_count(query, evidence) < settings.auto_collect_min_relevant
+            and "osint" in lanes_consulted
+            and lane_counts.get("osint", 0) < settings.auto_collect_min_relevant
         ):
             _, auto_collected = collect_for_query(session, query)
             if auto_collected:
@@ -467,7 +491,7 @@ def generate_brief(
         # Triage (retrieval path only — explicit `evidence` callers know what they passed):
         # if the corpus still holds nothing relevant after collection, say so instantly
         # instead of deliberating to a predetermined "no evidence".
-        if not evidence or not has_relevant_evidence(query, evidence):
+        if not evidence or _fused_relevant_count(query, evidence) == 0:
             n_docs = session.scalar(select(func.count()).select_from(Document)) or 0
             result = no_reporting_brief(query, n_docs, collection_enabled=settings.auto_collect)
             result.evidence = []
@@ -476,6 +500,11 @@ def generate_brief(
             result.lane_reason = lane_reason
             log.info("brief_triaged", kind="no_relevant_reporting", corpus_docs=n_docs)
             return result
+
+    # Explicit-evidence callers bypass the worker orchestrator, so enforce the same invariant
+    # at the synthesis boundary as well. Duplicate evidence must never receive extra citation
+    # weight merely because it arrived through a different entry point.
+    evidence = deduplicate_evidence(evidence)
 
     mode = mode or settings.brief_mode
     mode_reason: str | None = None
