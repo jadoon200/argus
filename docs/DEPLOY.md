@@ -53,6 +53,11 @@ ARGUS_PHAROS_API_URL=https://pharos-0y6q.onrender.com
 ARGUS_SENTINEL_API_URL=https://sentinel-92pf.onrender.com
 ```
 
+The same non-secret defaults are baked into `Dockerfile.web`. This keeps direct container
+deploys and existing Render services functional even when a service auto-deploys the image
+without first re-synchronising changed Blueprint environment variables; explicit environment
+values still override the image defaults.
+
 No credentials or writes cross these links. A failed or sleeping sibling contributes no
 evidence and never fails the brief; `/overview` reports it unreachable. The overview fan-out is
 cached for 60 seconds (`ARGUS_FUSION_OVERVIEW_CACHE_SECONDS`) so tab opens do not hammer the
