@@ -20,6 +20,13 @@ _PROFILES: dict[Lane, frozenset[str]] = {
     "osint": frozenset(),  # the base reporting lane is always consulted
     "sky": frozenset(
         {
+            # Lane / project / domain names the user actually types for this lane.
+            "air",
+            "airborne",
+            "aerospace",
+            "horus",
+            "sky",
+            # Air-domain vocabulary.
             "adsb",
             "aerial",
             "aircraft",
@@ -43,6 +50,9 @@ _PROFILES: dict[Lane, frozenset[str]] = {
     ),
     "ocean": frozenset(
         {
+            # Lane / project names.
+            "pharos",
+            # Maritime-domain vocabulary.
             "ais",
             "boat",
             "coastguard",
@@ -65,6 +75,9 @@ _PROFILES: dict[Lane, frozenset[str]] = {
     ),
     "cyber": frozenset(
         {
+            # Lane / project names.
+            "sentinel",
+            # Cyber-domain vocabulary.
             "apt",
             "breach",
             "cve",
