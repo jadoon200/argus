@@ -25,6 +25,23 @@ log = get_logger(__name__)
 
 OsintGatherer = Callable[[Session, str, int], list[EvidenceItem]]
 
+# A sibling lane's evidence fetcher: (settings, limit, query) -> rated items.
+LaneFetcher = Callable[..., list[EvidenceItem]]
+
+
+def _gather_with_salient_fallback(
+    fetch: LaneFetcher, settings: Settings, query: str, limit: int
+) -> list[EvidenceItem]:
+    """The lane's query-relevant items, or its top salient items if the filter matched nothing.
+
+    The supervisor has already decided this lane is relevant to the query, so a domain-level
+    question ("the most major incident in the ocean") — which shares no subject token with a
+    specific incident ("AIS spoofing, MMSI 563000029") — must still surface that lane's top
+    incidents instead of silently returning nothing. Precise queries still get the per-incident
+    filter; only an empty result falls back to salience.
+    """
+    return fetch(settings, limit=limit, query=query) or fetch(settings, limit=limit)
+
 
 @dataclass(frozen=True)
 class WorkerStatus:
@@ -113,7 +130,7 @@ class SkyWorker:
     lane: ClassVar[Lane] = "sky"
 
     def gather(self, query: str, limit: int) -> list[EvidenceItem]:
-        return sky_evidence(self.settings, limit=limit, query=query)
+        return _gather_with_salient_fallback(sky_evidence, self.settings, query, limit)
 
     def status(self) -> WorkerStatus:
         if not self.settings.horus_api_url:
@@ -142,7 +159,7 @@ class OceanWorker:
     lane: ClassVar[Lane] = "ocean"
 
     def gather(self, query: str, limit: int) -> list[EvidenceItem]:
-        return ocean_evidence(self.settings, limit=limit, query=query)
+        return _gather_with_salient_fallback(ocean_evidence, self.settings, query, limit)
 
     def status(self) -> WorkerStatus:
         if not self.settings.pharos_api_url:
@@ -171,7 +188,7 @@ class CyberWorker:
     lane: ClassVar[Lane] = "cyber"
 
     def gather(self, query: str, limit: int) -> list[EvidenceItem]:
-        return cyber_evidence(self.settings, limit=limit, query=query)
+        return _gather_with_salient_fallback(cyber_evidence, self.settings, query, limit)
 
     def status(self) -> WorkerStatus:
         if not self.settings.sentinel_api_url:
