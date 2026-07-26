@@ -75,6 +75,7 @@ def evaluate(
         evidence = [by_id[doc_id] for doc_id, _ in ranked[:EVAL_K]]
 
         brief = generate_brief(gold.query, evidence=evidence, backend=backend, persist=False)
+        evidence = brief.evidence  # synthesis may collapse same-source duplicate episodes
         valid = set(evidence_labels(evidence)) | {e.doc_id for e in evidence}
         fabricated = sorted({m for m in citation_markers(brief.body) if m not in valid})
 

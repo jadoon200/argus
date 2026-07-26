@@ -20,11 +20,17 @@ doesn't and pulls nothing. Subject-less queries keep everything (relevance is un
 not zero — same contract as triage).
 """
 
+from datetime import datetime
 from typing import Any
 
 import httpx
 
-from argus.agent.state import EvidenceItem
+from argus.agent.state import (
+    EVIDENCE_EPISODE_WINDOW,
+    EvidenceItem,
+    deduplicate_evidence,
+    parse_evidence_time,
+)
 from argus.agent.triage import relevant_count
 from argus.config import Settings, get_settings
 from argus.logging import get_logger
@@ -32,6 +38,59 @@ from argus.logging import get_logger
 log = get_logger(__name__)
 
 _RELIABILITY_GRADES = frozenset("ABCDEF")
+_MAX_INCIDENT_POOL = 500  # both sibling APIs bound `limit` at 500
+
+
+def _row_episode_identity(row: dict[str, Any]) -> tuple[str, tuple[str, ...]] | None:
+    """Canonical source-domain identity for repeated detections of one GEOINT episode."""
+    detector = str(row.get("detector") or "").casefold().strip()
+    primary = str(row.get("mmsi") or row.get("icao24") or "").casefold().strip()
+    counterpart = str(row.get("counterpart_mmsi") or "").casefold().strip()
+    if counterpart and primary:
+        subjects = tuple(sorted((primary, counterpart)))  # A→B and B→A are one rendezvous
+    elif primary:
+        subjects = (primary,)
+    else:
+        zone = str(row.get("zone") or "").casefold().strip()
+        subjects = (f"zone:{zone}",) if zone else ()
+    return (detector, subjects) if detector and subjects else None
+
+
+def _row_detail_score(row: dict[str, Any]) -> tuple[int, int, int]:
+    return (
+        int(bool(row.get("zone"))),
+        len(str(row.get("summary") or "")),
+        int(bool(row.get("url"))),
+    )
+
+
+def _deduplicate_episode_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse consecutive same-subject detections while preserving the source ranking."""
+    kept: list[dict[str, Any]] = []
+    clusters: dict[tuple[str, tuple[str, ...]], list[tuple[list[datetime], int]]] = {}
+    for row in rows:
+        identity = _row_episode_identity(row)
+        timestamp = parse_evidence_time(str(row.get("published") or "") or None)
+        if identity is None or timestamp is None:
+            kept.append(row)
+            continue
+
+        matched: tuple[list[datetime], int] | None = None
+        for cluster in clusters.get(identity, []):
+            if any(abs(timestamp - existing) <= EVIDENCE_EPISODE_WINDOW for existing in cluster[0]):
+                matched = cluster
+                break
+        if matched is None:
+            index = len(kept)
+            kept.append(row)
+            clusters.setdefault(identity, []).append(([timestamp], index))
+            continue
+
+        times, index = matched
+        times.append(timestamp)
+        if _row_detail_score(row) > _row_detail_score(kept[index]):
+            kept[index] = row
+    return kept
 
 
 def _as_credibility(value: Any) -> int | None:
@@ -104,16 +163,20 @@ class GeointBridge:
         url = str(row.get("url") or "") or None
         if url and url.startswith("/"):
             url = f"{self._url}{url}"  # siblings serve relative links; make citable
-        zone = row.get("zone")
-        zone_note = f" Zone: {zone}." if zone else ""
+        zone = str(row.get("zone") or "").strip()
         summary = str(row.get("summary") or "").strip() or None
+        body = summary or title
+        # PHAROS/HORUS often include the zone in their sentence already. Append it only
+        # when absent so the analyst does not see "in Singapore Strait ... Zone: Singapore
+        # Strait" inside one card.
+        zone_note = f" Zone: {zone}." if zone and zone.casefold() not in body.casefold() else ""
         return EvidenceItem(
             doc_id=f"{self._source}:{doc_id}",
             title=title,
             source=self._source,
             reliability=_as_reliability(row.get("reliability")),
             credibility=_as_credibility(row.get("credibility")),
-            summary=f"{summary or title}{zone_note}",
+            summary=f"{body}{zone_note}",
             published=str(row.get("published") or "") or None,
             url=url,
         )
@@ -126,11 +189,26 @@ class GeointBridge:
         The relevance filter runs over a deeper score-ordered pool first — otherwise a
         query-relevant incident outside the top-`limit` riskiest would be silently dropped.
         """
-        rows = self.incidents(limit * 10 if query else limit)
-        items = [item for row in rows if (item := self._to_item(row)) is not None]
+        if limit <= 0:
+            return []
+        # Pull a bounded deeper pool even without a query so episode de-duplication can
+        # backfill `limit` genuinely distinct incidents instead of returning a short list.
+        rows = self.incidents(min(limit * 10, _MAX_INCIDENT_POOL))
+        mapped = [(row, item) for row in rows if (item := self._to_item(row)) is not None]
         if query:
-            items = [i for i in items if relevant_count(query, [i]) > 0]
-        return items[:limit]
+            mapped = [(row, item) for row, item in mapped if relevant_count(query, [item]) > 0]
+        rows = _deduplicate_episode_rows([row for row, _item in mapped])
+        items = [item for row in rows if (item := self._to_item(row)) is not None]
+        unique = deduplicate_evidence(items)
+        if len(unique) < len(mapped):
+            log.info(
+                "geoint_duplicates_collapsed",
+                source=self._source,
+                received=len(mapped),
+                unique=len(unique),
+                dropped=len(mapped) - len(unique),
+            )
+        return unique[:limit]
 
 
 def _lane_evidence(

@@ -224,6 +224,26 @@ def test_fusion_preview_routes_and_gathers_without_an_llm(client: TestClient) ->
     assert [item["doc_id"] for item in body["evidence"]] == ["reuters.com:1"]
 
 
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("overview of the ocean from PHAROS", ["ocean"]),
+        ("overview of the sky from HORUS", ["sky"]),
+        ("overview of cyber threats from SENTINEL", ["cyber"]),
+        ("assess the disputed reef using OSINT", ["osint"]),
+    ],
+)
+def test_fusion_preview_honors_explicit_source_scope(
+    client: TestClient, query: str, expected: list[str]
+) -> None:
+    r = client.post("/fusion/preview", json={"query": query, "k": 3})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["lanes_consulted"] == expected
+    assert body["lane_reason"] and "explicit source scope" in body["lane_reason"]
+
+
 def test_brief_roundtrip_persists(client: TestClient) -> None:
     r = client.post("/brief", json={"query": "standoff at the disputed reef"})
     assert r.status_code == 200

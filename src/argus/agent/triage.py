@@ -142,6 +142,91 @@ _GENERIC = frozenset(
     ]
 )
 
+# Small, deterministic domain synonym sets for broad fusion questions. This is deliberately
+# narrower than open-ended semantic search: it lets "ocean" match maritime/sea reporting,
+# "sky" match aviation reporting, and "cyber" match CTI vocabulary without making unrelated
+# political/economic corpus filler look relevant.
+_DOMAIN_SUBJECT_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset(
+        {
+            "ais",
+            "boat",
+            "coast",
+            "coastguard",
+            "fleet",
+            "maritime",
+            "naval",
+            "navy",
+            "ocean",
+            "pharos",
+            "port",
+            "reef",
+            "sea",
+            "ship",
+            "shipping",
+            "strait",
+            "tanker",
+            "vessel",
+            "warship",
+        }
+    ),
+    frozenset(
+        {
+            "adsb",
+            "air",
+            "airborne",
+            "aircraft",
+            "airfield",
+            "airline",
+            "airport",
+            "airspace",
+            "aviation",
+            "drone",
+            "flight",
+            "gnss",
+            "gps",
+            "horus",
+            "jamming",
+            "jet",
+            "plane",
+            "radar",
+            "runway",
+            "sky",
+            "squawk",
+            "transponder",
+        }
+    ),
+    frozenset(
+        {
+            "apt",
+            "breach",
+            "cve",
+            "cyber",
+            "cyberattack",
+            "ddos",
+            "exploit",
+            "exploitation",
+            "hack",
+            "hacker",
+            "intrusion",
+            "malware",
+            "network",
+            "phishing",
+            "ransomware",
+            "rootkit",
+            "sentinel",
+            "trojan",
+            "vulnerability",
+            "zeroday",
+        }
+    ),
+)
+_DOMAIN_SUBJECT_ANCHORS: tuple[frozenset[str], ...] = (
+    frozenset({"maritime", "ocean", "pharos", "sea"}),
+    frozenset({"air", "aerospace", "aviation", "horus", "sky"}),
+    frozenset({"cyber", "sentinel"}),
+)
+
 
 def is_meta_query(query: str) -> bool:
     """True for conversational/meta questions that need no evidence or deliberation."""
@@ -163,9 +248,10 @@ def capabilities_brief(query: str) -> BriefResult:
         "calibrated confidence, key assumptions, indicators & warnings, and gaps.\n"
         "- Watch narratives - clusters coordinated messaging, flags contested events, and "
         "tags influence-operations techniques (DISARM framework).\n"
-        "- Fuse every source domain - a deterministic supervisor routes the question to "
-        "OSINT plus the relevant Sky/HORUS, Ocean/PHAROS, and Cyber/SENTINEL workers; "
-        "each returns citable, source-rated evidence before one central synthesis.\n\n"
+        "- Fuse every source domain - generic domain questions combine OSINT with the "
+        "relevant Sky/HORUS, Ocean/PHAROS, or Cyber/SENTINEL worker; naming a source "
+        "constrains the answer to that source. Each returns citable, source-rated evidence "
+        "before one central synthesis.\n\n"
         "Try: ingest a topic in the Collection view, then ask something like "
         '"What is driving tensions in the South China Sea?"'
     )
@@ -235,6 +321,20 @@ def subject_tokens(text: str) -> set[str]:
     return {token for token in _content_tokens(text) if not _is_generic(token)}
 
 
+def _singular_forms(tokens: set[str]) -> set[str]:
+    """Add a conservative singular form so ship/vessel plurals match without stemming."""
+    return tokens | {token[:-1] for token in tokens if len(token) > 4 and token.endswith("s")}
+
+
+def _relevance_subject_tokens(text: str) -> set[str]:
+    tokens = _singular_forms(subject_tokens(text))
+    expanded = set(tokens)
+    for anchors, group in zip(_DOMAIN_SUBJECT_ANCHORS, _DOMAIN_SUBJECT_GROUPS, strict=True):
+        if tokens & anchors:
+            expanded.update(group)
+    return expanded
+
+
 def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     """How many evidence items share a SUBJECT token with the query — the thin-coverage
     signal that triggers collect-on-demand (fewer relevant docs than the configured floor).
@@ -242,13 +342,17 @@ def relevant_count(query: str, evidence: list[EvidenceItem]) -> int:
     Matches on the query's subject tokens (content words minus generic framing/time words), so
     a document isn't counted relevant just because it shares a word like "tensions" or "recent".
     """
-    q_tokens = subject_tokens(query)
+    q_tokens = _relevance_subject_tokens(query)
     if not q_tokens:
         # No subject to match on (e.g. "any updates?") — relevance is unknowable, not zero.
         # Count everything so a conversational follow-up neither trips the no-reporting gate
         # nor tasks collection on a subject-less query; empty evidence still counts 0.
         return len(evidence)
-    return sum(1 for e in evidence if q_tokens & _content_tokens(f"{e.title} {e.summary or ''}"))
+    return sum(
+        1
+        for e in evidence
+        if q_tokens & _singular_forms(_content_tokens(f"{e.title} {e.summary or ''}"))
+    )
 
 
 def has_relevant_evidence(query: str, evidence: list[EvidenceItem]) -> bool:

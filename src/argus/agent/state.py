@@ -1,10 +1,15 @@
 """Shared types for the deliberation: evidence, graph state, and the final brief."""
 
+import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
 from argus.agent.schemas import AchMatrix, Critique, Finding
 from argus.nlp.reliability import admiralty_code, credibility_label, reliability_label
+
+EVIDENCE_EPISODE_WINDOW = timedelta(minutes=30)
+_TITLE_TOKEN = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,74 @@ class EvidenceItem:
             f"({reliability_label(self.reliability)}; {credibility_label(self.credibility)}) "
             f"{self.source}{when}: {self.title}. {body}"
         )
+
+
+def parse_evidence_time(value: str | None) -> datetime | None:
+    """Parse an ISO evidence timestamp to comparable UTC, tolerating date-only values."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _content_identity(item: EvidenceItem) -> tuple[str, str] | None:
+    title = _TITLE_TOKEN.sub(" ", item.title.casefold()).strip()
+    source = item.source.casefold().strip()
+    return (source, title) if source and title else None
+
+
+def _detail_score(item: EvidenceItem) -> tuple[int, int, int]:
+    """Prefer the representative with the richest analyst-visible context."""
+    return (len(item.summary or ""), int(item.url is not None), int(item.published is not None))
+
+
+def deduplicate_evidence(items: list[EvidenceItem]) -> list[EvidenceItem]:
+    """Collapse exact IDs and same-source near-duplicate evidence episodes.
+
+    Multiple sources reporting one event remain separate because corroboration is diagnostic.
+    Within one source, the same normalized title inside a 30-minute window is one evidence
+    episode; the richest representative replaces the first while preserving its rank slot.
+    Items without a usable timestamp are only de-duplicated by exact ``doc_id``.
+    """
+    kept: list[EvidenceItem] = []
+    id_indexes: dict[str, int] = {}
+    clusters: dict[tuple[str, str], list[tuple[list[datetime], int]]] = {}
+    for item in items:
+        duplicate_index = id_indexes.get(item.doc_id)
+        if duplicate_index is not None:
+            if _detail_score(item) > _detail_score(kept[duplicate_index]):
+                kept[duplicate_index] = item
+            continue
+        identity = _content_identity(item)
+        timestamp = parse_evidence_time(item.published)
+        if identity is None or timestamp is None:
+            id_indexes[item.doc_id] = len(kept)
+            kept.append(item)
+            continue
+
+        matched: tuple[list[datetime], int] | None = None
+        for cluster in clusters.get(identity, []):
+            if any(abs(timestamp - existing) <= EVIDENCE_EPISODE_WINDOW for existing in cluster[0]):
+                matched = cluster
+                break
+        if matched is None:
+            index = len(kept)
+            id_indexes[item.doc_id] = index
+            kept.append(item)
+            clusters.setdefault(identity, []).append(([timestamp], index))
+            continue
+
+        times, index = matched
+        id_indexes[item.doc_id] = index
+        times.append(timestamp)
+        if _detail_score(item) > _detail_score(kept[index]):
+            kept[index] = item
+    return kept
 
 
 def evidence_labels(items: list[EvidenceItem]) -> dict[str, str]:

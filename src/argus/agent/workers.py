@@ -13,7 +13,7 @@ from typing import ClassVar, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from argus.agent.state import EvidenceItem
+from argus.agent.state import EvidenceItem, deduplicate_evidence
 from argus.agent.supervisor import ALL_LANES, LANE_ORDER, Lane, route_domains
 from argus.bridge.geoint import GeointBridge, ocean_evidence, sky_evidence
 from argus.bridge.sentinel import SentinelBridge, cyber_evidence
@@ -229,7 +229,7 @@ def gather_fused_evidence(
     settings: Settings | None = None,
     lane_limit: int = 5,
 ) -> FusionGather:
-    """Route, dispatch selected workers, fuse their evidence, and de-duplicate by doc id."""
+    """Route, dispatch workers, and fuse unique evidence episodes across selected lanes."""
     active = settings or get_settings()
     if active.fusion_supervisor:
         planned, reason = route_domains(query)
@@ -244,7 +244,7 @@ def gather_fused_evidence(
     for lane in consulted:
         limit = osint_limit if lane == "osint" else lane_limit
         try:
-            items = workers[lane].gather(query, limit)
+            items = deduplicate_evidence(workers[lane].gather(query, limit))
         except Exception as exc:
             if lane == "osint":
                 raise
@@ -264,12 +264,7 @@ def gather_fused_evidence(
             if index < len(items):
                 fused.append(items[index])
 
-    seen: set[str] = set()
-    unique: list[EvidenceItem] = []
-    for item in fused:
-        if item.doc_id not in seen:
-            seen.add(item.doc_id)
-            unique.append(item)
+    unique = deduplicate_evidence(fused)
     return FusionGather(unique, consulted, reason, counts)
 
 

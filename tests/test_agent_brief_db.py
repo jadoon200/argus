@@ -42,6 +42,20 @@ def test_gather_evidence_ranks_and_rates(session: Session) -> None:
     assert items[0].rating() == "B3"
 
 
+def test_gather_evidence_drops_least_irrelevant_noise(session: Session) -> None:
+    _seed(session)
+
+    assert gather_evidence(session, "overview of quantum banking incidents", k=2) == []
+
+
+def test_gather_evidence_matches_broad_domain_synonyms(session: Session) -> None:
+    _seed(session)
+
+    items = gather_evidence(session, "overview of the ocean", k=2)
+
+    assert [item.doc_id for item in items] == ["reuters.com:1"]
+
+
 def test_gather_evidence_caps_per_source(session: Session) -> None:
     """One prolific outlet must not dominate the evidence: the per-source cap holds and a
     second source still makes the cut even when it ranks below the dominant one."""

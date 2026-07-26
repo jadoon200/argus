@@ -13,7 +13,7 @@ from langgraph.graph import END, START, StateGraph
 
 from argus.agent import nodes
 from argus.agent.llm import LLMBackend
-from argus.agent.state import DeliberationState, EvidenceItem
+from argus.agent.state import DeliberationState, EvidenceItem, deduplicate_evidence
 from argus.config import get_settings
 
 
@@ -50,6 +50,7 @@ def run_deliberation(
     debate_rounds: int | None = None,
     num_hypotheses: int | None = None,
 ) -> DeliberationState:
+    evidence = deduplicate_evidence(evidence)
     settings = get_settings()
     rounds = debate_rounds if debate_rounds is not None else settings.debate_rounds
     n_hyp = num_hypotheses if num_hypotheses is not None else settings.num_hypotheses

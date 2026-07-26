@@ -79,7 +79,7 @@ def generate_examples(
             and brief.body.strip()
             and citation_coverage(brief.key_judgments) >= min_coverage
         ):
-            examples.append(to_chat_example(query, format_evidence(evidence), brief.body))
+            examples.append(to_chat_example(query, format_evidence(brief.evidence), brief.body))
         else:
             log.warning("dropped_low_quality_example", query=query)
     return examples

@@ -147,6 +147,17 @@ def test_relevant_count() -> None:
     assert relevant_count("quantum banking collapse", reef) == 0
 
 
+def test_relevant_count_matches_broad_domain_synonyms() -> None:
+    maritime = [_ev("South China Sea patrol", "Coast guard vessels approached a reef")]
+    aviation = [_ev("Aircraft surveillance gap", "A flight disappeared from radar")]
+    cyber = [_ev("Ransomware campaign", "Malware exploited a network vulnerability")]
+
+    assert relevant_count("Give me an overview of the ocean", maritime) == 1
+    assert relevant_count("Give me an overview of the sky", aviation) == 1
+    assert relevant_count("Give me an overview of cyber threats", cyber) == 1
+    assert relevant_count("Give me an overview of the ocean", aviation + cyber) == 0
+
+
 def test_collect_on_demand_fills_an_empty_corpus(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:

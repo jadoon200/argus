@@ -16,7 +16,7 @@ Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 | 5b | React / TypeScript dashboard — fusion overview + gather preview, workbench (query → rated evidence + cited brief with Admiralty badges), narrative-watch panel, collection | ✅ done |
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch") + `/narratives` API | ✅ done |
 | 7 | Cyber-fusion bridge — SENTINEL cyber campaigns as citable evidence (read-only, `ARGUS_SENTINEL_API_URL`) | ✅ done |
-| 7b | **Lean multi-agent source fusion** — deterministic supervisor routes to OSINT + selected Sky/HORUS, Ocean/PHAROS, Cyber/SENTINEL workers; one central synthesis; transparent `lanes_consulted`; cached `/overview` | ✅ done |
+| 7b | **Lean multi-agent source fusion** — deterministic supervisor fuses OSINT + domain lanes for generic requests and honors explicit named-source scope; one central synthesis; transparent `lanes_consulted`; cached `/overview` | ✅ done |
 | 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
 | 9 | **Live deployment** — one-service Render app; live sibling URLs wired read-only; health/evidence paths smoke-tested | ✅ done |
 
@@ -53,13 +53,16 @@ nation attribution (`APT28 ⇄ Russia`), annotated onto the cyber-fusion evidenc
 actor of the brief; attribution shown as contested, open-reporting consensus, human-review — never an automated verdict.
 
 **Multi-domain source-agent fusion** (`src/argus/agent/{supervisor,workers}.py`) promotes the
-existing bridges into first-class workers. A lexical, deterministic supervisor always includes
-OSINT and selectively dispatches Sky, Ocean, and Cyber; subject-less follow-ups conservatively
-fan out. Workers gather in the shared `EvidenceItem` contract and preserve Admiralty ratings,
-while the existing quick/ACH paths remain the only synthesis brain. This avoids loading multiple
-models on the M3 Pro. The old flat broadcast remains available via
-`ARGUS_FUSION_SUPERVISOR=false`. `/overview` caches server-side health/count/last-item fan-out;
-`/fusion/preview` makes routing and gathered evidence visible without an LLM.
+existing bridges into first-class workers. A lexical, deterministic supervisor fuses OSINT with
+the matching Sky, Ocean, or Cyber lanes for generic domain requests, while an explicitly named
+system constrains the gather to exactly the named source or sources. Subject-less and explicit
+all-source requests conservatively fan out. Workers gather in the shared `EvidenceItem` contract,
+preserve Admiralty ratings, collapse repeated same-source detector observations into unique
+evidence episodes, and reject least-irrelevant OSINT filler before presentation, while the
+existing quick/ACH paths remain the only synthesis brain. This avoids loading multiple models on
+the M3 Pro. The old flat broadcast remains available via `ARGUS_FUSION_SUPERVISOR=false`.
+`/overview` caches server-side health/count/last-item fan-out; `/fusion/preview` makes routing and
+gathered evidence visible without an LLM.
 
 **Recommended floor to ship:** milestones 0–7b and 9 are done — the full OSINT + Sky + Ocean +
 Cyber fusion story runs end-to-end through the supervisor and React dashboard. What remains is

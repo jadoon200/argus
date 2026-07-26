@@ -18,7 +18,8 @@ from argus.db.models import Document, Source
 
 
 def _settings(**kw: object) -> Settings:
-    return Settings(_env_file=None, auto_collect=False, **kw)  # type: ignore[arg-type]
+    kw.setdefault("auto_collect", False)
+    return Settings(_env_file=None, **kw)  # type: ignore[arg-type]
 
 
 def _item(doc_id: str, source: str, title: str) -> EvidenceItem:
@@ -104,7 +105,7 @@ def test_routed_lane_falls_back_to_salient_when_the_filter_empties(
 
     gathered = gather_fused_evidence(
         session,
-        "overview of the most major incident in the ocean for pharos",
+        "overview of the most major incident in the ocean",
         8,
         _osint,
         _settings(),
@@ -112,6 +113,101 @@ def test_routed_lane_falls_back_to_salient_when_the_filter_empties(
     assert gathered.lanes_consulted == ["osint", "ocean"]
     assert "ocean-geoint:top" in [item.doc_id for item in gathered.evidence]
     assert gathered.lane_counts["ocean"] == 1
+
+
+def test_explicit_pharos_scope_does_not_dispatch_osint(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "argus.agent.workers.ocean_evidence",
+        lambda *_args, **_kwargs: [
+            _item("ocean-geoint:top", "ocean-geoint", "AIS spoofing - MMSI 563000029")
+        ],
+    )
+    monkeypatch.setattr("argus.agent.workers.sky_evidence", _must_not_run("sky"))
+    monkeypatch.setattr("argus.agent.workers.cyber_evidence", _must_not_run("cyber"))
+
+    gathered = gather_fused_evidence(
+        session,
+        "overview of the ocean from PHAROS",
+        8,
+        _must_not_run("osint"),
+        _settings(),
+    )
+
+    assert gathered.lanes_consulted == ["ocean"]
+    assert gathered.lane_counts == {"ocean": 1}
+    assert [item.source for item in gathered.evidence] == ["ocean-geoint"]
+    assert "explicit source scope" in gathered.reason
+
+
+def test_explicit_pharos_brief_skips_osint_collection_and_keeps_salient_evidence(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "argus.agent.analyst.get_settings",
+        lambda: _settings(pharos_api_url="http://pharos.test"),
+    )
+    monkeypatch.setattr(
+        "argus.agent.workers.ocean_evidence",
+        lambda *_args, **_kwargs: [
+            _item("ocean-geoint:top", "ocean-geoint", "AIS spoofing - MMSI 563000029")
+        ],
+    )
+    monkeypatch.setattr("argus.agent.analyst.collect_for_query", _must_not_run("OSINT collection"))
+
+    result = generate_brief(
+        "Give me an overview from PHAROS",
+        session=session,
+        backend=None,
+        persist=False,
+    )
+
+    assert result.backend == "template"
+    assert result.lanes_consulted == ["ocean"]
+    assert [item.doc_id for item in result.evidence] == ["ocean-geoint:top"]
+    assert result.auto_collected is None
+
+
+def test_generic_domain_brief_collects_thin_osint_even_with_sibling_evidence(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "argus.agent.analyst.get_settings",
+        lambda: _settings(horus_api_url="http://horus.test", auto_collect=True),
+    )
+    monkeypatch.setattr(
+        "argus.agent.workers.sky_evidence",
+        lambda *_args, **_kwargs: [
+            _item("sky-geoint:top", "sky-geoint", "GNSS interference near an air corridor")
+        ],
+    )
+
+    def collect(db: Session, _query: str) -> tuple[int, int]:
+        db.add(Source(label="aviation.example", reliability="C"))
+        db.add(
+            Document(
+                doc_id="aviation.example:1",
+                source="aviation.example",
+                title="Aircraft report GNSS interference near a regional air corridor",
+                summary="Several flights reported degraded navigation near the airport.",
+            )
+        )
+        db.flush()
+        return 1, 1
+
+    monkeypatch.setattr("argus.agent.analyst.collect_for_query", collect)
+
+    result = generate_brief(
+        "Give me an overview of the sky",
+        session=session,
+        backend=None,
+        persist=False,
+    )
+
+    assert result.lanes_consulted == ["osint", "sky"]
+    assert {item.source for item in result.evidence} == {"aviation.example", "sky-geoint"}
+    assert result.auto_collected == 1
 
 
 def test_supervisor_flag_off_restores_flat_fusion_and_deduplicates(
@@ -161,6 +257,37 @@ def test_fusion_round_robins_lanes_so_sibling_evidence_is_not_buried(
         "ocean-geoint:1",
         "news:2",
     ]
+
+
+def test_fusion_enforces_near_duplicate_invariant_per_lane(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sparse = EvidenceItem(
+        "ocean-geoint:spoof-1",
+        "AIS spoofing - MMSI 563000029",
+        "ocean-geoint",
+        "B",
+        2,
+        "Impossible jump.",
+        "2023-01-01T00:50:00",
+    )
+    rich = EvidenceItem(
+        "ocean-geoint:spoof-2",
+        "AIS spoofing - MMSI 563000029",
+        "ocean-geoint",
+        "B",
+        2,
+        "Impossible jump in the Singapore Strait with zone context.",
+        "2023-01-01T00:55:00",
+    )
+    monkeypatch.setattr(
+        "argus.agent.workers.ocean_evidence", lambda *_args, **_kwargs: [sparse, rich]
+    )
+
+    gathered = gather_fused_evidence(session, "Vessels in the strait", 8, _osint, _settings())
+
+    assert [item.doc_id for item in gathered.evidence] == ["news:1", rich.doc_id]
+    assert gathered.lane_counts["ocean"] == 1
 
 
 def test_disabled_worker_degrades_to_empty_and_reports_disabled() -> None:
