@@ -145,6 +145,11 @@ class Settings(BaseSettings):
     # Server-side overview fan-out is cached so opening the dashboard does not hammer the
     # free-tier sibling services (or repeatedly wake a sleeping instance).
     fusion_overview_cache_seconds: float = 60.0
+    # A shorter TTL when a lane came back unreachable: on the free tier that is usually just a
+    # cold-started sibling (the fan-out that timed out has now WOKEN it), so the overview
+    # should self-heal within seconds on the next open rather than show it down for the full
+    # TTL. Kept short but non-zero so a genuinely-down lane still isn't re-fanned every request.
+    fusion_overview_unreachable_cache_seconds: float = 8.0
     # Empty disables a lane. PHAROS (Ocean) and HORUS (Sky) both serve
     # /geoint/evidence already speaking EvidenceItem, so one client (bridge/geoint.py)
     # validates + re-keys both; relevance is the deterministic triage subject-token gate

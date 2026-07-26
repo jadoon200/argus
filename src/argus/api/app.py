@@ -255,7 +255,8 @@ class MapDisarmRequest(BaseModel):
 
 
 _overview_cache_lock = Lock()
-_overview_cache: dict[int, tuple[float, list[OverviewLaneOut]]] = {}
+# (cached_at, rows, all_configured_lanes_reachable) — the flag picks the TTL on read.
+_overview_cache: dict[int, tuple[float, list[OverviewLaneOut], bool]] = {}
 
 
 # --- read-only routes ----------------------------------------------------------------
@@ -455,8 +456,15 @@ def overview(db: Session = Depends(get_db)) -> list[OverviewLaneOut]:
     now = monotonic()
     with _overview_cache_lock:
         cached = _overview_cache.get(key)
-        if cached and now - cached[0] < settings.fusion_overview_cache_seconds:
-            return cached[1]
+        if cached is not None:
+            cached_at, cached_rows, all_reachable = cached
+            ttl = (
+                settings.fusion_overview_cache_seconds
+                if all_reachable
+                else settings.fusion_overview_unreachable_cache_seconds
+            )
+            if now - cached_at < ttl:
+                return cached_rows
 
     rows = [
         OverviewLaneOut(
@@ -474,8 +482,12 @@ def overview(db: Session = Depends(get_db)) -> list[OverviewLaneOut]:
         )
         for status in overview_statuses(db, gather_evidence, settings)
     ]
+    # A configured lane that came back unreachable is usually just a cold free-tier sibling the
+    # fan-out has now woken; cache that briefly so the next open self-heals rather than pinning
+    # it "down" for the full TTL. A fully-reachable snapshot gets the full cache window.
+    all_reachable = all(row.reachable for row in rows if row.configured)
     with _overview_cache_lock:
-        _overview_cache[key] = (now, rows)
+        _overview_cache[key] = (now, rows, all_reachable)
     return rows
 
 
