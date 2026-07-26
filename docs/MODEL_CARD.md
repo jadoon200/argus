@@ -48,12 +48,16 @@ It is **decision support for a human analyst**, not an autonomous decision-maker
 ## Domain-source agents
 
 The domain workers are retrieval agents, not independent generators. The supervisor uses
-transparent keyword profiles to select lanes; workers fetch and relevance-filter deterministically
-and return the shared `EvidenceItem` type. One central quick pass or ACH panel performs synthesis.
-This lean design keeps peak local memory to one model on the M3 Pro and avoids multiplying panel
-latency by the number of domains. Fresh API responses expose `lanes_consulted` and the route
-reason; `/fusion/preview` exposes the same gather without a model. The former flat gather remains
-behind `ARGUS_FUSION_SUPERVISOR=false` for rollback.
+transparent keyword profiles to select lanes. Generic domain requests combine OSINT with the
+matching sibling lane; explicitly naming PHAROS, HORUS, SENTINEL, or OSINT constrains the gather
+to exactly the named sources. Small domain synonym sets keep broad-domain OSINT reporting in the
+fused result, and collect-on-demand fills thin OSINT coverage only when OSINT is in scope. Workers
+fetch and relevance-filter deterministically and return the shared `EvidenceItem` type. One
+central quick pass or ACH panel performs synthesis. This lean design keeps peak local memory to
+one model on the M3 Pro and avoids multiplying panel latency by the number of domains. Fresh API
+responses expose `lanes_consulted` and the route reason; `/fusion/preview` exposes the same gather
+without a model. The former flat gather remains behind `ARGUS_FUSION_SUPERVISOR=false` for
+rollback.
 
 ## Source-reliability model
 
@@ -139,8 +143,8 @@ strict one. On the reef judgment that scored 0.00 strict, decomposition separate
 entailment 0.98) from the ungrounded inference ("a show of force rather than direct confrontation", 0.00) for an honest **0.50**. Caveat: the
 red-team `Critiques` step timed out on 5/10 queries under local-model latency, so some briefs ran on a degraded panel. Full record in [`docs/EVAL.md`](EVAL.md).
 
-The deterministic source-domain router is separately measured on a six-query labelled set:
-lane precision **1.00**, recall **1.00**, and exact-set match **6/6**. This is a small regression
+The deterministic source-domain router is separately measured on an eleven-query labelled set:
+lane precision **1.00**, recall **1.00**, and exact-set match **11/11**. This is a small regression
 set, not an open-domain semantic-routing claim; the lexical limitation is recorded below and in
 the evaluation document.
 

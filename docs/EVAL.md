@@ -61,21 +61,31 @@ content, not just a label.
 ### 5. Fusion lane routing
 
 The source-domain supervisor is deterministic, so it has its own labelled set independent of
-brief quality. `src/argus/eval/fusion.py` covers six query shapes: Ocean, Sky, Cyber, a
-Sky+Ocean hybrid, OSINT-only politics, and a subject-less follow-up that must conservatively fan
-out. We measure micro precision/recall over lane labels plus exact-set match per query.
+brief quality. `src/argus/eval/fusion.py` covers eleven query shapes: generic Ocean, Sky, Cyber,
+a Sky+Ocean hybrid, OSINT-only politics, a subject-less follow-up that must conservatively fan
+out, four explicitly scoped source requests, and a two-source PHAROS+SENTINEL comparison. We
+measure micro precision/recall over lane labels plus exact-set match per query.
 
 | Metric | Result |
 |---|---|
-| Lane-selection precision | **1.00 (6-query labelled v1 set)** |
-| Lane-selection recall | **1.00 (6-query labelled v1 set)** |
-| Exact lane-set match | **1.00 (6/6)** |
+| Lane-selection precision | **1.00 (11-query labelled v2 set)** |
+| Lane-selection recall | **1.00 (11-query labelled v2 set)** |
+| Exact lane-set match | **1.00 (11/11)** |
 
 This is a deliberately small regression set, not proof of open-domain semantic routing. It is
 executable (`evaluate_routing()`), included in `make eval`, and paired with mocked integration
-tests proving an Ocean query does not wake Sky/Cyber and a Cyber query does not wake Sky/Ocean.
-The rollback flag (`ARGUS_FUSION_SUPERVISOR=false`) is also tested to consult all lanes and
-de-duplicate their evidence.
+tests proving a generic Ocean query wakes OSINT+Ocean, `from PHAROS` wakes only Ocean, and the
+same contract holds for HORUS, SENTINEL, and explicit OSINT. The rollback flag
+(`ARGUS_FUSION_SUPERVISOR=false`) is also tested to consult all lanes and de-duplicate their
+evidence.
+
+Broad domain wording uses small deterministic synonym sets at the evidence gate (`ocean` ↔
+sea/maritime, `sky` ↔ air/aviation, `cyber` ↔ CTI vocabulary), so the OSINT side of a generic
+domain request is not discarded merely because the reporting uses a domain synonym. When a
+generic fused brief has thin OSINT coverage, collect-on-demand is still tasked even if the
+sibling already returned several incidents; an explicitly source-scoped sibling request skips
+OSINT collection entirely. A lane can still honestly return zero items when no matching public
+reporting exists—source scoping controls which workers are consulted, never fabricates evidence.
 
 **Live source-path smoke (2026-07-26):** all three sibling `/health` endpoints returned OK;
 PHAROS `/stats` reported 7 Ocean incidents and returned citable `/geoint/evidence`; HORUS
@@ -89,11 +99,31 @@ domain lane; the deterministic brief path interleaved the sibling results with O
 their absolute source links. The browser pass also verified the four ready overview cards,
 pre-synthesis gather preview, Admiralty badges, and visible lane-routing rationale.
 
-**Recorded limitation:** v1 routing is lexical by design—free, instant, and explainable, but it
+**Evidence-uniqueness regression (2026-07-26):** the live source-path audit found that PHAROS
+correctly emitted two detector observations five minutes apart for MMSI `563000029`, but ARGUS
+treated their distinct upstream IDs as two analyst evidence cards. HORUS likewise emitted three
+successive area-level GNSS observations for one corridor, and PHAROS represented one rendezvous
+as reciprocal `A→B` and `B→A` rows. The presentation/synthesis boundary now collapses
+same-source, same-subject detector observations inside a 30-minute episode window, keeps the
+richest representative, and backfills with the next genuinely distinct incident. The general
+evidence boundary also collapses exact IDs and same-source normalized-title episodes before
+fusion, deliberation, evaluation, optimization, and fine-tuning. Different sources remain
+separate because corroboration is diagnostic; different detector signals and later episodes
+also remain separate. On the audited live payloads, PHAROS went from **7 raw rows to 5 unique
+episodes** and HORUS from **10 to 8**. Mocked regressions cover the MMSI case, reciprocal
+rendezvous rows, zone-only GNSS alerts, citation-label alignment, and per-lane counts.
+
+The same audit removed another preview failure mode: hybrid retrieval always has a
+least-irrelevant top-k result, so unrelated OSINT cards could appear beside a domain-level Ocean
+query. The OSINT retrieval boundary now requires at least one real subject-token overlap (while
+retaining the existing subject-less follow-up behavior), so top-k noise is not presented as
+supporting evidence.
+
+**Recorded limitation:** v2 routing is lexical by design—free, instant, and explainable, but it
 can miss an indirect domain reference or over-route an ambiguous term. Subject-less queries
-intentionally broadcast to every lane, sacrificing precision to avoid a false negative when
-conversation context is unavailable. The current 1.00 is therefore reported only on the six
-labelled query shapes, not as a general semantic-routing claim.
+and explicit all-source requests intentionally broadcast to every lane, sacrificing precision to
+avoid a false negative when conversation context is unavailable. The current 1.00 is therefore
+reported only on the eleven labelled query shapes, not as a general semantic-routing claim.
 
 ### 6. Backend parity
 The deterministic fallback and the Claude-backed agent are scored on the **same** gold set, so

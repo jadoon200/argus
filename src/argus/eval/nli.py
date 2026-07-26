@@ -24,7 +24,7 @@ from typing import Protocol
 
 import numpy as np
 
-from argus.agent.state import EvidenceItem, evidence_labels
+from argus.agent.state import EvidenceItem, deduplicate_evidence, evidence_labels
 from argus.eval.judge import JudgeScores
 from argus.eval.metrics import citation_markers
 from argus.logging import get_logger
@@ -95,6 +95,7 @@ def score_brief_nli(
     sub-claim scored, so faithfulness/citation-support are the RAGAS-style *fraction* of
     sub-claims entailed (by any / by the cited evidence). With it off, the whole judgment is
     entailed as one hypothesis — the strict variant that under-credits analytic synthesis."""
+    evidence = deduplicate_evidence(evidence)
     scores = JudgeScores()
     if not evidence:
         return scores

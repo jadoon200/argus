@@ -13,7 +13,7 @@ is a known weakness — spot-check against human labels; recorded honestly in do
 from pydantic import BaseModel
 
 from argus.agent.llm import LLMBackend
-from argus.agent.state import EvidenceItem, format_evidence
+from argus.agent.state import EvidenceItem, deduplicate_evidence, format_evidence
 from argus.agent.structured import complete_model
 
 _JUDGE_SYSTEM = """You are a strict intelligence-review editor. You are given open-source
@@ -51,6 +51,7 @@ def judge_brief(
     judgments: list[str], evidence: list[EvidenceItem], backend: LLMBackend
 ) -> JudgeScores:
     """Score each key judgment for groundedness and citation support (one judge call each)."""
+    evidence = deduplicate_evidence(evidence)
     block = format_evidence(evidence)
     scores = JudgeScores()
     for judgment in judgments:

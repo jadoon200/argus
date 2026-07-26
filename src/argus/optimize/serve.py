@@ -12,7 +12,13 @@ import sys
 from pathlib import Path
 
 from argus.agent.analyst import _resolve_citations
-from argus.agent.state import BriefResult, EvidenceItem, evidence_labels, format_evidence
+from argus.agent.state import (
+    BriefResult,
+    EvidenceItem,
+    deduplicate_evidence,
+    evidence_labels,
+    format_evidence,
+)
 from argus.logging import configure_logging, get_logger
 from argus.optimize.program import BriefProgram, configure_lm
 
@@ -38,6 +44,7 @@ def optimized_brief(
     query: str, evidence: list[EvidenceItem], program: BriefProgram | None = None
 ) -> BriefResult:
     """Run the compiled DSPy program for `query` over `evidence` into a cited brief."""
+    evidence = deduplicate_evidence(evidence)
     if program is None:
         configure_lm()
         program = load_program()
