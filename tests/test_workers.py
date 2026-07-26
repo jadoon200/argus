@@ -84,6 +84,36 @@ def test_cyber_plan_dispatches_cyber_only(
     assert {item.source for item in gathered.evidence} == {"news", "sentinel-cyber"}
 
 
+def test_routed_lane_falls_back_to_salient_when_the_filter_empties(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A domain-level question routes to a lane but shares no subject token with any specific
+    incident, so the per-incident filter matches nothing. The lane must still surface its top
+    incidents. Regression for the live `ocean · 0` on "the most major incident in the ocean".
+    """
+
+    def ocean(_settings: object, limit: int = 5, query: str | None = None) -> list[EvidenceItem]:
+        # With a query the per-incident filter matches nothing; without one, the salient top.
+        if query:
+            return []
+        return [_item("ocean-geoint:top", "ocean-geoint", "AIS spoofing - MMSI 563000029")]
+
+    monkeypatch.setattr("argus.agent.workers.ocean_evidence", ocean)
+    monkeypatch.setattr("argus.agent.workers.sky_evidence", _must_not_run("sky"))
+    monkeypatch.setattr("argus.agent.workers.cyber_evidence", _must_not_run("cyber"))
+
+    gathered = gather_fused_evidence(
+        session,
+        "overview of the most major incident in the ocean for pharos",
+        8,
+        _osint,
+        _settings(),
+    )
+    assert gathered.lanes_consulted == ["osint", "ocean"]
+    assert "ocean-geoint:top" in [item.doc_id for item in gathered.evidence]
+    assert gathered.lane_counts["ocean"] == 1
+
+
 def test_supervisor_flag_off_restores_flat_fusion_and_deduplicates(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
