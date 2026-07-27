@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/jadoon200/argus/actions/workflows/ci.yml/badge.svg)](https://github.com/jadoon200/argus/actions/workflows/ci.yml)
 
+**Live demo:** https://argus-lrhu.onrender.com (baked corpus + deterministic briefs; run locally with Ollama for live multi-agent deliberation)
+
 **All-source intelligence analyst workbench** — a deterministic supervisor gathers from
 **Sky** (HORUS), **Ocean** (PHAROS), **Cyber** (SENTINEL), and the open-source information
 environment, then a **multi-agent ACH deliberation panel** fuses the source-rated evidence
