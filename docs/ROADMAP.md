@@ -17,7 +17,7 @@ Deadline anchor: a demonstrable MVP well before **~10 Aug 2026**.
 | 6 | Analysis 2b — narrative clustering + coordination detection ("narrative watch") + `/narratives` API | ✅ done |
 | 7 | Cyber-fusion bridge — SENTINEL cyber campaigns as citable evidence (read-only, `ARGUS_SENTINEL_API_URL`) | ✅ done |
 | 7b | **Lean multi-agent source fusion** — deterministic supervisor fuses OSINT + domain lanes for generic requests and honors explicit named-source scope; one central synthesis; transparent `lanes_consulted`; cached `/overview` | ✅ done |
-| 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers), demo video, blog post | ⬜ |
+| 8 | Polish — fuller `EVAL.md` (judge calibration, multi-seed, LLM-path numbers); demo video / blog post dropped, the dashboard's explainer carries the story | ⬜ |
 | 9 | **Live deployment** — one-service Render app; live sibling URLs wired read-only; health/evidence paths smoke-tested | ✅ done |
 
 Beyond the numbered spine, the "tune to our purpose" track is also done: domain-specialized
