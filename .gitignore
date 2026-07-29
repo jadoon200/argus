@@ -28,3 +28,7 @@ frontend/dist/
 # Local agent/editor config — keep OUT of the repo (local copies are fine)
 .claude/
 CLAUDE.md
+
+# Local-only agent/planning notes (never committed)
+AGENTS.md
+IMPROVEMENT_PLAN.md
