@@ -57,16 +57,23 @@ Every claim in a brief carries a citation `[doc_id]`. We check, per cited claim:
 |---|---|---|
 | Citation resolvable rate | cited `doc_id`s that exist | **100% (enforced)** |
 | Citation support rate | cited items that support their claim | see auto-recorded block |
-| Judge–human agreement | judge vs human labels on the support call | TBD (spot-check) |
+| Judge–human agreement | judge vs human labels on the support call | **0.90 (9/10)** — see caveat |
+
+The agreement figure is the cross-family NLI scorer against the hand-labelled entailment
+slice (`ENTAILMENT_GOLD`, 5 entailed / 5 not). **Read it as a spot-check, not an estimate:**
+at n=10 the 95% interval runs roughly 0.60–0.98, so it rules out a scorer that is badly
+broken and rules in very little else.
 
 ### 3. Faithfulness / groundedness
 Fraction of key judgments the LLM-judge finds **grounded** in *some* evidence item (no
 free-floating assertions); the hallucinated-claim rate is the inverse. Measured by the same
 `judge_brief`; recorded in the auto block below.
 
-> **Self-judging caveat.** With a local model the judge and the analyst are the same family,
-> so these numbers carry a known optimism bias — they are a regression signal, not ground
-> truth. The honest fix is judge–human agreement on a labelled subset (above, TBD).
+> **Self-judging caveat — now measured, and it is large.** With a local model the judge and
+> the analyst are the same family. Scoring the *same* Ollama briefs both ways: the LLM judge
+> reports faithfulness **0.90**, the cross-family NLI scorer **0.383** — the model grading its
+> own output is **2.4× more generous**. Treat any self-judged number as a regression signal
+> only; the cross-family column is the one to read.
 
 ### 4. Source-reliability calibration
 Does the Admiralty rating mean anything? We check that higher-rated sources are, empirically,
@@ -145,14 +152,39 @@ avoid a false negative when conversation context is unavailable. The current 1.0
 reported only on the eleven labelled query shapes, not as a general semantic-routing claim.
 
 ### 6. Backend parity
-The deterministic fallback and the Claude-backed agent are scored on the **same** gold set, so
-the cost of running key-free is explicit and honest.
+Both available backends scored on the **same** gold set (10 queries), by the **cross-family**
+NLI scorer rather than the self-judging LLM, so the cost of running key-free is explicit.
 
-| Backend | Citation support | Faithfulness | Notes |
-|---|---|---|---|
-| deterministic (extractive) | TBD | TBD | always-on floor; no key |
-| local Ollama (`qwen2.5:14b`) | TBD | TBD | recommended; `llama2` too weak |
-| Claude (Anthropic API) | TBD | TBD | best quality, opt-in only |
+| Backend | Citation support | Faithfulness | Strict faithfulness | Trap breaches | Notes |
+|---|---|---|---|---|---|
+| deterministic (extractive) | **0.475** | **0.583** | 0.633 | 0/10 | always-on floor; no key |
+| local Ollama (`qwen2.5:14b`) | 0.183 | 0.383 | 0.100 | 1/10 | self-judged as 0.65 / 0.90 |
+| Claude (Anthropic API) | not run | not run | not run | — | needs a key; not measured |
+
+**The free deterministic path is the more grounded one.** On cross-family scoring the
+extractive fallback beats the 14B local model on faithfulness (0.583 vs 0.383) and citation
+support (0.475 vs 0.183), and it never breached a calibration trap where the model breached
+one. The LLM judge reported the opposite ranking for the model (0.90 faithfulness) — which is
+precisely why the self-judged number is not the one published.
+
+**Read the gap with two corrections, both of which cut against the headline.** First,
+entailment metrics structurally favour extraction: the template restates source sentences, so
+its claims are near-verbatim entailed, while a model that *synthesises* is penalised for
+paraphrase — the strict variant (0.633 vs 0.100) is mostly measuring that, not reasoning
+quality. The atomic/decomposed variant is the fairer comparison and still favours the
+template. Second, n=10 queries with 1–3 judgments each is a small denominator; these separate
+"clearly different" from "clearly the same", not 0.38 from 0.45.
+
+What survives both corrections: **paying nothing costs nothing in groundedness here**, and a
+local 14B model is not a free upgrade over deterministic extraction on this gold set.
+
+Reproduce (locally, where the models are present — the run downloads the NLI cross-encoder):
+
+```
+ARGUS_NLI_ENABLED=true make eval                                   # deterministic backend
+ARGUS_NLI_ENABLED=true ARGUS_LLM_BACKEND=ollama \
+  ARGUS_OLLAMA_MODEL=qwen2.5:14b make eval                         # local model
+```
 
 ## Gold set
 
