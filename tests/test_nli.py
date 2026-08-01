@@ -138,3 +138,43 @@ def test_agreement_perfect_and_imperfect() -> None:
     assert agreement(KeywordNli("sky"), cases) == 1.0
     # "the" is in both premises: predicts True for both -> right on case 1, wrong on case 2 -> 0.5.
     assert agreement(KeywordNli("the"), cases) == 0.5
+
+
+def test_nli_resolves_doc_id_citations_not_just_labels() -> None:
+    """The deterministic digest cites `[doc_id]`; the model path cites `[E1]`. Both count.
+
+    Resolving labels alone made citation-support 0.0 for *every* template brief — not because
+    those briefs cite badly (they cite resolvable ids) but because the scorer never looked the
+    id up. That artefact reads as a finding about the backend, so it is pinned here.
+    """
+    from argus.agent.state import EvidenceItem
+    from argus.eval.nli import score_brief_nli
+
+    class AlwaysEntails:
+        def predict_entailment(self, pairs):  # type: ignore[no-untyped-def]
+            return [1.0] * len(pairs)
+
+    evidence = [
+        EvidenceItem(
+            doc_id="reuters.com:0001",
+            title="Coast guard standoff at the reef",
+            source="reuters.com",
+            reliability="B",
+            credibility=2,
+            summary="Two coast guard ships confronted fishing boats at the reef.",
+            url=None,
+        )
+    ]
+    by_doc_id = score_brief_nli(
+        ["Coast guard vessels were in a standoff [reuters.com:0001]"],
+        evidence,
+        AlwaysEntails(),  # type: ignore[arg-type]
+    )
+    assert by_doc_id.n and by_doc_id.supported == by_doc_id.n, "doc_id citation must resolve"
+
+    by_label = score_brief_nli(
+        ["Coast guard vessels were in a standoff [E1]"],
+        evidence,
+        AlwaysEntails(),  # type: ignore[arg-type]
+    )
+    assert by_label.supported == by_label.n, "label citation must still resolve"
