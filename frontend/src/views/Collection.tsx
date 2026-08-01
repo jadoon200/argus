@@ -6,6 +6,11 @@ import { api, reliabilityMeta, type SourceOut } from "../api";
 function IngestBox() {
   const [topic, setTopic] = useState("");
   const qc = useQueryClient();
+  // Ingest ends in an embed step, and the slim public image ships no encoder. Ask the API
+  // whether this deployment can finish the job rather than offering a control that fails
+  // only once someone picks a topic GDELT actually has reporting for.
+  const model = useQuery({ queryKey: ["model"], queryFn: api.model, staleTime: 5 * 60_000 });
+  const canIngest = model.data?.can_ingest ?? true;
   const ingest = useMutation({
     mutationFn: (q: string) => api.ingest(q),
     onSuccess: () => {
@@ -20,7 +25,7 @@ function IngestBox() {
 
   function run() {
     const q = topic.trim();
-    if (q && !ingest.isPending) ingest.mutate(q);
+    if (q && !ingest.isPending && canIngest) ingest.mutate(q);
   }
 
   return (
@@ -30,6 +35,14 @@ function IngestBox() {
         Pull open-source reporting (GDELT global news) on a topic into the corpus, then enrich it
         — entities, events, Admiralty credibility. Takes ~30–60s.
       </p>
+      {!canIngest && (
+        <p className="section-note" style={{ marginTop: 4 }}>
+          <b>Not available on this deployment.</b> Enrichment embeds each new document, and the
+          free-tier image ships no embedding model — so collection could start here but never
+          finish. The baked demo corpus below is already loaded; run ARGUS locally to ingest new
+          topics.
+        </p>
+      )}
       <div className="composer-box" style={{ marginTop: 8 }}>
         <textarea
           rows={1}
@@ -43,7 +56,11 @@ function IngestBox() {
             }
           }}
         />
-        <button className="primary send" onClick={run} disabled={!topic.trim() || ingest.isPending}>
+        <button
+          className="primary send"
+          onClick={run}
+          disabled={!topic.trim() || ingest.isPending || !canIngest}
+        >
           {ingest.isPending ? "Ingesting…" : "Ingest"}
         </button>
       </div>
