@@ -6,6 +6,7 @@ so it carries the rate-limit + concurrency guards from limits.py. GET /model exp
 active inference backend so the model layer is observable, not hidden, in a deployment.
 """
 
+import importlib.util
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from threading import Lock
@@ -86,6 +87,10 @@ class ModelInfo(BaseModel):
     configured: str  # ARGUS_LLM_BACKEND
     active: str  # the backend that would actually run a brief
     ollama_models: list[str]
+    # Whether THIS deployment can actually ingest. Collection ends in `enrich`, which embeds
+    # the new documents, and the slim public image ships no sentence-transformers — so the
+    # dashboard must not offer a control that can only fail here.
+    can_ingest: bool
 
 
 class Stats(BaseModel):
@@ -265,6 +270,17 @@ def health() -> Health:
     return Health(version=__version__)
 
 
+def _can_ingest() -> bool:
+    """Can this deployment complete an ingest, or only start one?
+
+    Collection ends in `enrich`, which embeds every new document via sentence-transformers.
+    The slim public image ships numpy but not the encoder, so an ingest that actually found
+    articles died at the embed step and surfaced the raw ImportError as a 502. Probed here
+    so the API can refuse cleanly and the dashboard can say so before anyone clicks.
+    """
+    return importlib.util.find_spec("sentence_transformers") is not None
+
+
 @app.get("/model", response_model=ModelInfo)
 def model_info() -> ModelInfo:
     backend = resolve_backend()
@@ -272,6 +288,7 @@ def model_info() -> ModelInfo:
         configured=settings.llm_backend,
         active=backend.name if backend else "template",
         ollama_models=ollama_models(settings.ollama_url),
+        can_ingest=_can_ingest(),
     )
 
 
@@ -623,6 +640,19 @@ def ingest(payload: IngestRequest, request: Request, db: Session = Depends(get_d
         raise HTTPException(status_code=422, detail="query too long")
     if not _rate_limiter.allow(request):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
+    # Refuse before fetching rather than dying at the embed step. Without the encoder this
+    # route could only fail — and it failed *inconsistently*: a query GDELT had nothing for
+    # returned a cheerful 200/0, while a query that actually found articles 502'd with a raw
+    # "No module named 'sentence_transformers'" in the public response body.
+    if not _can_ingest():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ingest is unavailable on this deployment: the slim image ships no embedding "
+                "model, so collected documents could not be enriched. Run ARGUS locally to "
+                "ingest new topics; the baked demo corpus is already loaded here."
+            ),
+        )
     from argus.collection.ondemand import collect_for_query
 
     try:

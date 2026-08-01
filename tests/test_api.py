@@ -98,6 +98,27 @@ def test_ingest_endpoint_guarded_and_counts(
     assert body["documents"] == 1  # the seeded corpus is intact
 
 
+def test_ingest_refuses_cleanly_where_it_cannot_enrich(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deployment without the encoder must say so, not fail halfway through.
+
+    The slim public image ships no sentence-transformers, so collection reached the embed
+    step and died there. That surfaced two different wrong answers depending on what GDELT
+    happened to hold: a topic with no articles returned a cheerful 200/0, while a topic with
+    articles returned 502 and leaked "No module named 'sentence_transformers'" to the public
+    body. Refuse up front instead, with a reason a reader can act on.
+    """
+    monkeypatch.setattr("argus.api.app._can_ingest", lambda: False)
+    r = client.post("/ingest", json={"query": "Ukraine"})
+    assert r.status_code == 503
+    detail = r.json()["detail"]
+    assert "embedding model" in detail and "locally" in detail
+    # The failure must never expose the import machinery it came from.
+    assert "sentence_transformers" not in detail
+    assert client.get("/model").json()["can_ingest"] is False
+
+
 def test_meta_question_answers_instantly_and_is_not_persisted(client: TestClient) -> None:
     r = client.post("/brief", json={"query": "what can u do"})
     assert r.status_code == 200
