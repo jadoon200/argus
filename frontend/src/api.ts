@@ -15,6 +15,8 @@ export interface ModelInfo {
   configured: string; // ARGUS_LLM_BACKEND
   active: string; // the backend that would actually run a brief
   ollama_models: string[];
+  /** False on the slim deploy: enrichment needs an embedding model it does not ship. */
+  can_ingest: boolean;
 }
 
 export interface Stats {
