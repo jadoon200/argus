@@ -34,3 +34,27 @@ def test_missing_embeddings_fall_back_to_lexical() -> None:
 
 def test_empty_corpus() -> None:
     assert hybrid_search("anything", [], None) == []
+
+
+def test_gold_set_saturates_lexical_retrieval() -> None:
+    """Guards the claim in docs/EVAL.md that the ablation is unanswered.
+
+    BM25 alone already ranks a relevant document first for every gold query, so the gold set
+    cannot separate BM25 / dense / RRF — the retrieval table records that the retriever
+    clears the fixture, not that fusion helps. If a future gold set stops saturating (a
+    lexical miss appears), this fails, and the EVAL claim must be revisited rather than
+    silently carried forward. Embedding-free: it asserts the *lexical* ceiling.
+    """
+    from argus.eval.goldset import CORPUS, QUERIES
+    from argus.nlp.retrieval import RetrievedDoc, hybrid_search
+
+    docs = [RetrievedDoc(d.doc_id, f"{d.title}. {d.summary}", embedding=None) for d in CORPUS]
+    misses = [
+        q.query
+        for q in QUERIES
+        if hybrid_search(q.query, docs, query_embedding=None, top_k=1)[0][0] not in q.relevant_ids
+    ]
+    assert not misses, (
+        "BM25 no longer tops every gold query, so the gold set can now discriminate "
+        f"between rankers — re-run scripts/eval_retrieval.py and update docs/EVAL.md: {misses}"
+    )
