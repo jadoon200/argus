@@ -101,6 +101,11 @@ def score_brief_nli(
         return scores
     labels = evidence_labels(evidence)  # {"E1": doc_id, ...}
     by_label = {label: evidence[i] for i, label in enumerate(labels)}
+    # Briefs cite in either form: the deterministic digest emits the raw `[doc_id]`, the model
+    # path emits `[E1]`. Resolving labels alone made citation-support 0.0 *by construction* for
+    # every template brief — a scorer artefact that reads as a finding about the backend. The
+    # fabrication check in eval/run.py already accepts both forms; match it.
+    by_label.update({e.doc_id: e for e in evidence})
     ev_texts = [_evidence_text(e) for e in evidence]
 
     for judgment in judgments:
