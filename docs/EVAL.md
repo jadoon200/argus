@@ -9,14 +9,33 @@
 ## What we measure
 
 ### 1. Retrieval quality (Layer 2a)
-Given a labelled query → relevant-documents set, score the hybrid (BM25 + dense, RRF) retriever.
+Given a labelled query → relevant-documents set, score the retriever. Measured by
+`scripts/eval_retrieval.py` over the gold set (**20 documents, 10 labelled queries**),
+run locally where the full embedding model is present.
 
-| Metric | Definition | Result |
-|---|---|---|
-| Recall@10 | fraction of relevant docs in the top 10 | TBD |
-| Recall@20 | fraction of relevant docs in the top 20 | TBD |
-| MRR | mean reciprocal rank of the first relevant doc | TBD |
-| Dense vs BM25 vs RRF | ablation — does fusion actually beat either alone? | TBD |
+| Ranker | R@1 | R@3 | R@5 | MRR |
+|---|---|---|---|---|
+| BM25 only | 0.750 | 1.000 | 1.000 | 1.000 |
+| Dense only | 0.750 | 1.000 | 1.000 | 1.000 |
+| RRF hybrid | 0.750 | 1.000 | 1.000 | 1.000 |
+
+**The ablation is unanswered, and the reason is the fixture, not the retriever.** All three
+rankers score identically, because BM25 alone already places a relevant document at rank 1
+for all 10 queries — the gold queries are lexically distinctive enough that there is no
+headroom for the dense channel or the fusion to demonstrate anything. So this table records
+that the retriever clears the gold set, and *nothing* about whether hybrid retrieval beats
+either half. Publishing "RRF = 1.000" as evidence for fusion would be reading a saturated
+benchmark as a result.
+
+`Recall@10` and `Recall@20` were the originally-stated metrics and have been dropped as
+uninformative here: with a 20-document corpus, R@20 is 1.0 by construction and R@10 only
+asks whether a relevant document reached the top half. R@1/R@3 are what the fixture was
+designed to stress ("the corpus is large enough that recall@3 can fail").
+
+Answering the ablation needs a harder labelled set — more documents, and distractors that
+are *lexically* close to the queries but not relevant, which is where a dense channel should
+earn its place. That set does not exist yet; inventing distractors to produce a favourable
+separation would be fabricating the result this table exists to prevent.
 
 ### 2. Citation accuracy (the headline)
 Every claim in a brief carries a citation `[doc_id]`. We check, per cited claim:
