@@ -42,6 +42,15 @@ class LLMBackend(Protocol):
         ...
 
 
+@runtime_checkable
+class SeedableBackend(Protocol):
+    """Optional capability used by the multi-seed evaluation harness."""
+
+    def set_seed(self, seed: int) -> None:
+        """Make subsequent local generations reproducible for one evaluation run."""
+        ...
+
+
 class OllamaBackend:
     """Local Ollama chat backend (free). Resolves to any installed model if the
     configured one isn't pulled, so the agent runs with whatever the user has."""
@@ -51,6 +60,10 @@ class OllamaBackend:
         self._url = url.rstrip("/")
         self._model = model
         self._timeout = timeout
+        self._seed: int | None = None
+
+    def set_seed(self, seed: int) -> None:
+        self._seed = seed
 
     def complete(
         self,
@@ -60,6 +73,9 @@ class OllamaBackend:
         temperature: float | None = None,
     ) -> str:
         temp = _DEFAULT_TEMPERATURE if temperature is None else temperature
+        options: dict[str, Any] = {"temperature": temp}
+        if self._seed is not None:
+            options["seed"] = self._seed
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
@@ -67,7 +83,7 @@ class OllamaBackend:
                 {"role": "user", "content": user},
             ],
             "stream": False,
-            "options": {"temperature": temp},
+            "options": options,
         }
         if response_schema is not None:
             payload["format"] = response_schema  # Ollama structured outputs (JSON schema)
@@ -130,6 +146,10 @@ class OpenAIBackend:
         self._key = api_key
         self._model = model
         self._timeout = timeout
+        self._seed: int | None = None
+
+    def set_seed(self, seed: int) -> None:
+        self._seed = seed
 
     def complete(
         self,
@@ -149,6 +169,8 @@ class OpenAIBackend:
             ],
             "temperature": _DEFAULT_TEMPERATURE if temperature is None else temperature,
         }
+        if self._seed is not None:
+            payload["seed"] = self._seed
         if response_schema is not None:
             payload["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {self._key}"} if self._key else {}
@@ -169,6 +191,10 @@ class MLXBackend:
         self._model_name = model
         self._adapter_path = adapter_path
         self._loaded: tuple[Any, Any] | None = None
+        self._seed: int | None = None
+
+    def set_seed(self, seed: int) -> None:
+        self._seed = seed
 
     def _ensure_loaded(self) -> tuple[Any, Any]:
         if self._loaded is None:
@@ -187,6 +213,12 @@ class MLXBackend:
         response_schema: dict[str, Any] | None = None,
         temperature: float | None = None,  # mlx-lm sampling left at its default
     ) -> str:
+        if self._seed is not None:
+            # Import dynamically so MLX remains an optional, Darwin-only dependency.
+            import importlib
+
+            mlx_core = importlib.import_module("mlx.core")
+            mlx_core.random.seed(self._seed)
         from mlx_lm import generate
 
         if response_schema is not None:
@@ -199,6 +231,18 @@ class MLXBackend:
         ]
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         return str(generate(model, tokenizer, prompt=prompt, max_tokens=2048)).strip()
+
+
+def set_backend_seed(backend: LLMBackend, seed: int) -> bool:
+    """Seed a backend when it exposes reproducible sampling.
+
+    Backends without an explicit seed adapter are rejected: the eval harness refuses to label
+    repeated unseeded calls as a multi-seed result.
+    """
+    if not isinstance(backend, SeedableBackend):
+        return False
+    backend.set_seed(seed)
+    return True
 
 
 def ollama_models(url: str, timeout: float = 3.0) -> list[str]:

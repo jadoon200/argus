@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     nli_enabled: bool = False
     nli_model: str = "cross-encoder/nli-deberta-v3-base"
     nli_entailment_threshold: float = 0.5
+    # Comma-separated seeds for repeated local-model evaluation. Empty keeps the fast,
+    # backward-compatible single-run path used by CI. `make eval-multiseed` supplies three.
+    eval_seeds: str = ""
 
     # --- Sibling bridge: SENTINEL cyber knowledge-graph API (read-only) ---------------
     # Empty disables the query_cyber_graph agent tool.

@@ -145,6 +145,7 @@ make ingest Q="South China Sea"                     # pull open-source reporting
 make enrich                                         # entity/event extraction + Admiralty scoring
 make brief Q="What happened in the South China Sea this week?"   # generate a cited brief
 make eval                                           # score the agent on the gold set
+make eval-multiseed                                 # repeat local-model eval across 3 seeds
 make api          # read-only API + agent route on :8000
 
 # Exercise the live read-only Sky/Ocean/Cyber workers through the supervisor:

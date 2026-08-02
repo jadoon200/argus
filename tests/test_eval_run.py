@@ -1,11 +1,18 @@
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from argus.eval.goldset import QUERIES
 from argus.eval.run import (
     _BEGIN,
     _END,
+    SeedRun,
     eval_doc_block,
     evaluate,
+    multiseed_eval_doc_block,
+    parse_eval_seeds,
+    render_multiseed_report,
     render_report,
     update_eval_doc,
 )
@@ -41,6 +48,41 @@ def test_render_report_has_aggregates() -> None:
     assert "calibration trap breaches" in md
     assert "fusion lane-routing precision" in md
     assert "fusion lane-routing exact match" in md
+
+
+def test_parse_eval_seeds_is_ordered_and_duplicate_free() -> None:
+    assert parse_eval_seeds("") == ()
+    assert parse_eval_seeds("7, 19,7,43") == (7, 19, 43)
+    with pytest.raises(ValueError, match="non-negative"):
+        parse_eval_seeds("7,-1")
+
+
+def test_multiseed_report_surfaces_variability_and_confidence_stability() -> None:
+    baseline = evaluate(backend=None)
+    changed = [replace(report) for report in baseline]
+    changed[0] = replace(changed[0], confidence="moderate", over_confident=True)
+    runs = [SeedRun(7, baseline), SeedRun(19, changed)]
+
+    md = render_multiseed_report(runs, "fake-local")
+    assert "Seeds: 7, 19" in md
+    assert "mean ± sample standard deviation" in md
+    assert "calibration trap breaches per run" in md
+    assert "lowx1, moderatex1" in md
+    assert "| 0.50 |" in md  # first query breached in one of two runs
+
+    block = multiseed_eval_doc_block(runs, "fake-local")
+    assert "make eval-multiseed" in block and "seeds 7, 19" in block
+
+
+def test_multiseed_report_rejects_missing_or_misaligned_runs() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        render_multiseed_report([], "fake-local")
+
+    baseline = evaluate(backend=None)
+    with pytest.raises(ValueError, match="same non-empty query set"):
+        render_multiseed_report(
+            [SeedRun(7, baseline), SeedRun(19, list(reversed(baseline)))], "fake-local"
+        )
 
 
 def test_update_eval_doc_replaces_only_the_managed_block(tmp_path: Path) -> None:

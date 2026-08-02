@@ -1,4 +1,4 @@
-.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives hydrate brief fusion-demo eval api ui
+.PHONY: env install lock lint typecheck test check up down migrate ingest enrich narratives hydrate brief fusion-demo eval eval-multiseed api ui
 
 FUSION_HORUS_URL ?= https://horus-kc7w.onrender.com
 FUSION_PHAROS_URL ?= https://pharos-0y6q.onrender.com
@@ -82,6 +82,12 @@ brief-dspy:
 # Score the analyst agent/RAG on the gold query set (results -> docs/EVAL.md).
 eval:
 	python -m argus.eval.run
+
+# Repeat the complete LLM-path gold-set run with explicit local-model seeds, reporting
+# run-to-run standard deviation and per-query confidence stability. Override SEEDS as needed.
+SEEDS ?= 7,19,43
+eval-multiseed:
+	ARGUS_EVAL_SEEDS=$(SEEDS) python -m argus.eval.run
 
 # Compile (optimize) the brief prompt against the eval metric on the local model.
 # Needs the optimize extra: pip install -e .[optimize]

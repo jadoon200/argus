@@ -11,9 +11,10 @@ single low-reliability source?).
 
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import stdev
 
 from argus.agent.analyst import generate_brief
-from argus.agent.llm import LLMBackend, resolve_backend
+from argus.agent.llm import LLMBackend, resolve_backend, set_backend_seed
 from argus.agent.state import evidence_labels
 from argus.config import get_settings
 from argus.eval.fusion import evaluate_routing
@@ -54,6 +55,12 @@ class QueryReport:
     nli_citation_support: float | None = None
     nli_strict_faithfulness: float | None = None
     nli_strict_citation_support: float | None = None
+
+
+@dataclass(frozen=True)
+class SeedRun:
+    seed: int
+    reports: list[QueryReport]
 
 
 def evaluate(
@@ -120,6 +127,62 @@ def evaluate(
 
 def _mean(xs: list[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
+
+
+def parse_eval_seeds(raw: str) -> tuple[int, ...]:
+    """Parse a comma-separated, duplicate-free seed list from settings."""
+    if not raw.strip():
+        return ()
+    seeds: list[int] = []
+    for token in raw.split(","):
+        value = int(token.strip())
+        if value < 0:
+            raise ValueError("evaluation seeds must be non-negative integers")
+        if value not in seeds:
+            seeds.append(value)
+    return tuple(seeds)
+
+
+def _spread(xs: list[float], digits: int = 2) -> str:
+    """Mean ± sample standard deviation across seeded runs."""
+    if not xs:
+        return "—"
+    sd = stdev(xs) if len(xs) > 1 else 0.0
+    return f"{_mean(xs):.{digits}f} ± {sd:.{digits}f}"
+
+
+def _optional_mean(reports: list[QueryReport], field: str) -> float | None:
+    values = [getattr(report, field) for report in reports]
+    present = [float(value) for value in values if value is not None]
+    return _mean(present) if present else None
+
+
+def _run_metrics(reports: list[QueryReport]) -> dict[str, float | None]:
+    return {
+        "recall": _mean([report.recall for report in reports]),
+        "rr": _mean([report.rr for report in reports]),
+        "coverage": _mean([report.coverage for report in reports]),
+        "fabricated": float(sum(len(report.fabricated) for report in reports)),
+        "breaches": float(sum(report.over_confident for report in reports)),
+        "faithfulness": _optional_mean(reports, "faithfulness"),
+        "citation_support": _optional_mean(reports, "citation_support"),
+        "nli_faithfulness": _optional_mean(reports, "nli_faithfulness"),
+        "nli_citation_support": _optional_mean(reports, "nli_citation_support"),
+    }
+
+
+def _metric_values(metrics: list[dict[str, float | None]], field: str) -> list[float]:
+    present: list[float] = []
+    for run in metrics:
+        value = run[field]
+        if value is not None:
+            present.append(value)
+    return present
+
+
+def _display_metric(values: dict[str, float | None], field: str) -> str:
+    value = values[field]
+    return "—" if value is None else f"{value:.2f}"
 
 
 def _results_table(reports: list[QueryReport]) -> list[str]:
@@ -192,6 +255,100 @@ def render_report(reports: list[QueryReport], backend_name: str) -> str:
     return "\n".join(header + _results_table(reports))
 
 
+def _multiseed_results(runs: list[SeedRun]) -> list[str]:
+    """Compact repeated-run report: variability first, then per-query confidence stability."""
+    if not runs:
+        raise ValueError("at least one seeded evaluation run is required")
+    expected_queries = [report.query for report in runs[0].reports]
+    if not expected_queries or any(
+        [report.query for report in run.reports] != expected_queries for run in runs[1:]
+    ):
+        raise ValueError("seeded runs must contain the same non-empty query set in order")
+    metrics = [_run_metrics(run.reports) for run in runs]
+    lines = [
+        "| Seed | recall@k | cite-coverage | fabricated | trap breaches | "
+        "LLM faithfulness | LLM cite-support | NLI faithfulness | NLI cite-support |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for run, values in zip(runs, metrics, strict=True):
+        lines.append(
+            f"| {run.seed} | {_display_metric(values, 'recall')} | "
+            f"{_display_metric(values, 'coverage')} | "
+            f"{int(values['fabricated'] or 0)} | {int(values['breaches'] or 0)} | "
+            f"{_display_metric(values, 'faithfulness')} | "
+            f"{_display_metric(values, 'citation_support')} | "
+            f"{_display_metric(values, 'nli_faithfulness')} | "
+            f"{_display_metric(values, 'nli_citation_support')} |"
+        )
+
+    lines += [
+        "",
+        "Run-to-run mean ± sample standard deviation:",
+        "",
+        f"- **mean recall@{EVAL_K}**: {_spread(_metric_values(metrics, 'recall'))}",
+        f"- **mean MRR**: {_spread(_metric_values(metrics, 'rr'))}",
+        f"- **mean citation coverage**: {_spread(_metric_values(metrics, 'coverage'))}",
+        f"- **fabrication attempts caught per run**: "
+        f"{_spread(_metric_values(metrics, 'fabricated'))}",
+        f"- **calibration trap breaches per run**: {_spread(_metric_values(metrics, 'breaches'))}",
+    ]
+    optional = (
+        ("mean faithfulness (LLM-judge)", "faithfulness"),
+        ("mean citation support (LLM-judge)", "citation_support"),
+        ("mean NLI faithfulness (atomic)", "nli_faithfulness"),
+        ("mean NLI citation support (atomic)", "nli_citation_support"),
+    )
+    for label, field in optional:
+        metric_values = _metric_values(metrics, field)
+        if metric_values:
+            lines.append(f"- **{label}**: {_spread(metric_values)}")
+
+    lines += [
+        "",
+        "Per-query confidence stability:",
+        "",
+        "| Query | confidence calls | breach rate | mean cite-coverage | fabricated |",
+        "|---|---|---:|---:|---:|",
+    ]
+    for index in range(len(expected_queries)):
+        reports = [run.reports[index] for run in runs]
+        calls: dict[str, int] = {}
+        for report in reports:
+            label = report.confidence or "—"
+            calls[label] = calls.get(label, 0) + 1
+        call_text = ", ".join(f"{key}x{value}" for key, value in sorted(calls.items()))
+        breach_rate = sum(report.over_confident for report in reports) / len(reports)
+        coverage = _mean([report.coverage for report in reports])
+        fabricated = sum(len(report.fabricated) for report in reports)
+        lines.append(
+            f"| {reports[0].query[:42]} | {call_text} | {breach_rate:.2f} | "
+            f"{coverage:.2f} | {fabricated} |"
+        )
+
+    routing = evaluate_routing()
+    lines += [
+        "",
+        f"- **fusion lane-routing precision ({routing.cases}-query labelled set)**: "
+        f"{routing.precision:.2f}",
+        f"- **fusion lane-routing recall ({routing.cases}-query labelled set)**: "
+        f"{routing.recall:.2f}",
+        f"- **fusion lane-routing exact match ({routing.cases}-query labelled set)**: "
+        f"{routing.exact_match:.2f}",
+    ]
+    return lines
+
+
+def render_multiseed_report(runs: list[SeedRun], backend_name: str) -> str:
+    seeds = ", ".join(str(run.seed) for run in runs)
+    header = [
+        f"## ARGUS multi-seed eval — backend: `{backend_name}`",
+        "",
+        f"Seeds: {seeds}. Variability is reported across complete gold-set runs.",
+        "",
+    ]
+    return "\n".join(header + _multiseed_results(runs))
+
+
 # --- EVAL.md auto-recording ----------------------------------------------------------
 # `make eval` rewrites the block between these markers so the recorded numbers are
 # generated from the code, never hand-maintained (and never silently stale).
@@ -203,6 +360,12 @@ _END = "<!-- /AUTOGEN:eval-results -->"
 def eval_doc_block(reports: list[QueryReport], backend_name: str) -> str:
     note = f"_Auto-recorded by `make eval` — backend `{backend_name}`._"
     return "\n".join([note, "", *_results_table(reports)])
+
+
+def multiseed_eval_doc_block(runs: list[SeedRun], backend_name: str) -> str:
+    seeds = ", ".join(str(run.seed) for run in runs)
+    note = f"_Auto-recorded by `make eval-multiseed` — backend `{backend_name}`; seeds {seeds}._"
+    return "\n".join([note, "", *_multiseed_results(runs)])
 
 
 def update_eval_doc(block: str, doc: Path = EVAL_DOC) -> bool:
@@ -228,10 +391,37 @@ def main() -> None:
     nli_scorer = load_nli_scorer(settings.nli_model) if settings.nli_enabled else None
     if settings.nli_enabled and nli_scorer is not None:
         log.info("nli_judge_human_agreement", agreement=round(agreement(nli_scorer), 3))
-    reports = evaluate(backend, nli_scorer, settings.nli_entailment_threshold)
     name = backend.name if backend else "template"
-    print(render_report(reports, name))
-    if update_eval_doc(eval_doc_block(reports, name)):
+    try:
+        seeds = parse_eval_seeds(settings.eval_seeds)
+    except ValueError as exc:
+        raise SystemExit(f"Invalid ARGUS_EVAL_SEEDS: {exc}") from exc
+
+    if seeds and backend is None:
+        raise SystemExit(
+            "ARGUS_EVAL_SEEDS requires a seedable local backend; the template is deterministic."
+        )
+    if seeds:
+        assert backend is not None  # narrowed by the guard above
+        runs: list[SeedRun] = []
+        for seed in seeds:
+            if not set_backend_seed(backend, seed):
+                raise SystemExit(f"Backend {backend.name!r} does not expose reproducible seeding.")
+            log.info("eval_seed_started", backend=backend.name, seed=seed)
+            runs.append(
+                SeedRun(
+                    seed,
+                    evaluate(backend, nli_scorer, settings.nli_entailment_threshold),
+                )
+            )
+        print(render_multiseed_report(runs, name))
+        block = multiseed_eval_doc_block(runs, name)
+    else:
+        reports = evaluate(backend, nli_scorer, settings.nli_entailment_threshold)
+        print(render_report(reports, name))
+        block = eval_doc_block(reports, name)
+
+    if update_eval_doc(block):
         log.info("eval_doc_updated", path=str(EVAL_DOC))
 
 

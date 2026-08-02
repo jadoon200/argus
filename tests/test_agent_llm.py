@@ -13,6 +13,7 @@ from argus.agent.llm import (
     _resolve_ollama_model,
     ollama_models,
     resolve_backend,
+    set_backend_seed,
 )
 from argus.config import Settings
 
@@ -65,6 +66,28 @@ def test_openai_backend_completes_and_requests_json() -> None:
     backend.complete("sys", "user", response_schema={"type": "object"})
     body = json.loads(route.calls.last.request.content)
     assert body["response_format"]["type"] == "json_object"  # structured-output path
+
+
+@respx.mock
+def test_seeded_openai_backend_sends_seed() -> None:
+    route = respx.post("http://localhost:8000/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+    )
+    backend = OpenAIBackend("http://localhost:8000/v1", None, "local-model", 30.0)
+    assert set_backend_seed(backend, 19) is True
+    backend.complete("sys", "user")
+    assert json.loads(route.calls.last.request.content)["seed"] == 19
+
+
+@respx.mock
+def test_seeded_ollama_backend_sends_seed() -> None:
+    route = respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(200, json={"message": {"content": "hi"}})
+    )
+    backend = OllamaBackend("http://localhost:11434", "qwen2.5:14b", 30.0)
+    assert set_backend_seed(backend, 43) is True
+    backend.complete("sys", "user")
+    assert json.loads(route.calls.last.request.content)["options"]["seed"] == 43
 
 
 def test_mlx_backend_generates(monkeypatch: pytest.MonkeyPatch) -> None:

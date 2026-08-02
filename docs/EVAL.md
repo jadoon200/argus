@@ -199,6 +199,13 @@ correct brief should make, and known traps (topics with thin/low-reliability sou
 Retrieval metrics are deterministic (LLM-free, CI-safe); brief metrics use whatever backend
 is available (local Ollama, else the template digest).
 
+`make eval-multiseed` repeats the complete gold-set run with explicit seeds `7,19,43`
+(override with `SEEDS=...`) on Ollama, MLX, or an OpenAI-compatible local backend. It records
+run-level means with sample standard deviation and a per-query confidence-call distribution,
+so calibration and judge claims no longer rest on one stochastic draw. The fast `make eval`
+and CI paths remain single-run. Backends without an explicit seed adapter are deliberately
+excluded; repeated unseeded calls are not labelled "multi-seed."
+
 **Deterministic baseline (template backend, fixture corpus)** — auto-recorded below by
 `make eval` (never hand-edited). The fixture corpus is small and lexically clean, so
 retrieval=1.00 mainly guards against regressions — the discriminating checks are citation

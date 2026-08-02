@@ -10,6 +10,7 @@ def test_defaults_are_zero_cost_safe() -> None:
     assert s.sentinel_api_url == ""
     assert s.horus_api_url == "" and s.pharos_api_url == ""
     assert s.fusion_supervisor is True
+    assert s.eval_seeds == ""
     # Curated feeds are present and keyed by provenance label.
     assert "bbc-world" in s.rss_feeds
 
@@ -19,8 +20,10 @@ def test_env_prefix_override(monkeypatch) -> None:  # type: ignore[no-untyped-de
     monkeypatch.setenv("ARGUS_GDELT_MAX_RECORDS", "10")
     monkeypatch.setenv("ARGUS_FUSION_SUPERVISOR", "false")
     monkeypatch.setenv("ARGUS_PHAROS_API_URL", "http://pharos.test")
+    monkeypatch.setenv("ARGUS_EVAL_SEEDS", "7,19,43")
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.llm_backend == "template"
     assert s.gdelt_max_records == 10
     assert s.fusion_supervisor is False
     assert s.pharos_api_url == "http://pharos.test"
+    assert s.eval_seeds == "7,19,43"
