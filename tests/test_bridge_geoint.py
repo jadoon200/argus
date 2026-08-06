@@ -72,6 +72,32 @@ def test_geoint_evidence_empty_when_unreachable() -> None:
 
 
 @respx.mock
+def test_sibling_calls_outlast_a_free_tier_cold_start() -> None:
+    """A sleeping sibling must not read as a down one.
+
+    All four services are free-tier and suspend when idle; a measured HORUS cold start
+    answered in 31.3 s, which the shared 30 s HTTP timeout lost by a second. The fusion
+    overview then showed Sky and Ocean UNREACHABLE to anyone who opened ARGUS first — the
+    cross-lane join failing on a neighbour that was merely asleep.
+    """
+    settings = _settings(pharos_api_url="http://pharos.test")
+    assert settings.sibling_timeout_seconds > settings.http_timeout_seconds
+    assert settings.sibling_timeout_seconds >= 60.0, "must clear a ~30 s cold start with margin"
+
+    seen: list[object] = []
+
+    def _record(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions.get("timeout", {}).get("read"))
+        body: object = {} if request.url.path == "/health" else _EVIDENCE
+        return httpx.Response(200, json=body)
+
+    respx.get("http://pharos.test/health").mock(side_effect=_record)
+    respx.get("http://pharos.test/geoint/evidence").mock(side_effect=_record)
+    assert ocean_evidence(settings)
+    assert seen and all(t == settings.sibling_timeout_seconds for t in seen), seen
+
+
+@respx.mock
 def test_bridge_maps_real_geoint_schema_to_rated_evidence() -> None:
     _mock_api()
     bridge = GeointBridge("http://pharos.test", "ocean-geoint")

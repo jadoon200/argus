@@ -218,7 +218,7 @@ def cyber_evidence(
     s = settings or get_settings()
     if not s.sentinel_api_url:
         return []
-    bridge = SentinelBridge(s.sentinel_api_url, s.http_timeout_seconds)
+    bridge = SentinelBridge(s.sentinel_api_url, s.sibling_timeout_seconds)
     if not bridge.available():
         log.warning("sentinel_bridge_unreachable", url=s.sentinel_api_url)
         return []
