@@ -216,7 +216,7 @@ def _lane_evidence(
 ) -> list[EvidenceItem]:
     if not url:
         return []
-    bridge = GeointBridge(url, source_key, settings.http_timeout_seconds)
+    bridge = GeointBridge(url, source_key, settings.sibling_timeout_seconds)
     if not bridge.available():
         log.warning("geoint_bridge_unreachable", source=source_key, url=url)
         return []

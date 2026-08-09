@@ -156,6 +156,17 @@ class Settings(BaseSettings):
     # (neither has a technique mapper to route through, unlike SENTINEL).
     pharos_api_url: str = ""
     horus_api_url: str = ""
+    # Sibling lanes get a longer budget than the general HTTP timeout. All four services run
+    # on Render's free tier, which suspends an idle instance and needs roughly half a minute
+    # to serve its first request again. At the shared 30 s that is a coin flip: a measured
+    # HORUS cold start returned 200 in 31.3 s, so the fusion overview showed Sky and Ocean
+    # UNREACHABLE to anyone who opened ARGUS before its siblings — the cross-lane join is the
+    # whole point of that page, and it was failing on a sleeping neighbour rather than a
+    # broken one. Lanes load independently and each renders its own status, so a slow one
+    # costs only its own tile. Sized at roughly double the observed cold start rather than
+    # generously: /overview blocks until the fan-out returns, so every extra second here is a
+    # second the dashboard can spend saying "checking source lanes".
+    sibling_timeout_seconds: float = 60.0
 
     # --- API hardening for public deployment (safe local-dev defaults) ----------------
     api_allowed_origins: str = ""
