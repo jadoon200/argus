@@ -9,11 +9,15 @@
 environment, then a **multi-agent ACH deliberation panel** fuses the source-rated evidence
 into cited intelligence briefs held to a measured evaluation bar.
 
-> **Portfolio fusion point.** [HORUS](../horus) supplies the **Sky** picture (ADS-B and GNSS
-> interference), [PHAROS](../pharos) supplies the **Ocean** picture (AIS maritime awareness),
-> and [SENTINEL](../sentinel) supplies the **Cyber** picture (network intrusions × ATT&CK ×
-> CTI). ARGUS is the supervisor and synthesis layer: it selectively queries those read-only
-> systems alongside its own news corpus, preserving provenance and Admiralty ratings.
+> **Portfolio fusion point.** [HORUS](https://github.com/jadoon200/horus) supplies the **Sky**
+> picture (ADS-B and GNSS interference), [PHAROS](https://github.com/jadoon200/pharos) supplies
+> the **Ocean** picture (AIS maritime awareness), and
+> [SENTINEL](https://github.com/jadoon200/sentinel) supplies the **Cyber** picture (network
+> intrusions × ATT&CK × CTI). ARGUS is the supervisor and synthesis layer: it selectively
+> queries those read-only systems alongside its own news corpus, preserving provenance and
+> Admiralty ratings. [DELPHI](https://github.com/jadoon200/delphi) is the portfolio's fifth
+> project and the one ARGUS does not consume — it decides capacity rather than detecting
+> events.
 
 > **Status:** the lean fusion supervisor, Sky/Ocean/Cyber-OSINT workers, ACH agent spine,
 > API, overview/workbench dashboard, and narrative watch are complete (plus DSPy prompt
@@ -161,8 +165,12 @@ model via Ollama (`ollama pull qwen2.5:14b`; `llama2` is too weak). To use Claud
 
 ## Project context
 
-ARGUS is the fourth in a portfolio of from-scratch, honestly-evaluated systems
-([sentinel](../sentinel), [time-forecasting](../time-forecasting),
-[mlx-tiny-transformer](../mlx-tiny-transformer)), oriented toward Singapore's **Digital and
-Intelligence Service (DIS)** mission space: cyber defence, all-source/digital intelligence, and
-information defence.
+ARGUS is one of five from-scratch, honestly-evaluated systems built as one body of work —
+[SENTINEL](https://github.com/jadoon200/sentinel) (cyber),
+[HORUS](https://github.com/jadoon200/horus) (air),
+[PHAROS](https://github.com/jadoon200/pharos) (maritime),
+[DELPHI](https://github.com/jadoon200/delphi) (infrastructure capacity) and this one
+(all-source fusion) — alongside smaller model-craft work such as
+[mlx-tiny-transformer](https://github.com/jadoon200/mlx-tiny-transformer). The common thread
+is the evaluation discipline rather than the domain: measured baselines, pre-registered
+questions, and negatives written down where they fell.
